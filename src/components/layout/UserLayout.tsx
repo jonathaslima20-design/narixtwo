@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
-import { Menu, ShieldOff } from 'lucide-react';
+import { Brain, Menu, ShieldOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UserSidebar } from './UserSidebar';
 import { useAuth } from '../../lib/AuthContext';
@@ -72,6 +72,12 @@ function UserLayoutInner() {
         <main className="flex-1">
           <Outlet />
         </main>
+        <footer className="py-6 flex items-center justify-center gap-2 opacity-40">
+          <div className="w-6 h-6 bg-gray-900 rounded-lg flex items-center justify-center">
+            <Brain size={12} className="text-white" />
+          </div>
+          <span className="text-xs font-medium text-gray-500 tracking-tight">BrainLead</span>
+        </footer>
       </div>
 
       {/* Account disabled overlay */}
