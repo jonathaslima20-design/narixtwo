@@ -149,6 +149,16 @@ function SidebarPlanWidget({
   const base = 'w-full text-left rounded-2xl p-3.5 transition-all duration-150 cursor-pointer';
 
   if (isBlocked) {
+    const sendsExhausted = maxSends !== -1 && sendCount >= maxSends;
+    const timeExpired = daysLeft <= 0;
+    let reason = 'Seu periodo de teste terminou. Escolha um plano para continuar.';
+    if (sendsExhausted && !timeExpired) {
+      reason = 'Voce utilizou todos os envios de teste. Escolha um plano para continuar.';
+    } else if (timeExpired && !sendsExhausted) {
+      reason = 'Seu periodo de teste terminou. Escolha um plano para continuar.';
+    } else if (sendsExhausted && timeExpired) {
+      reason = 'Seu periodo de teste terminou e os envios foram utilizados. Escolha um plano para continuar.';
+    }
     return (
       <button onClick={onClick} className={`${base} bg-red-50 border border-red-100 hover:bg-red-100/70`}>
         <div className="flex items-center gap-2 mb-1">
@@ -156,7 +166,7 @@ function SidebarPlanWidget({
           <span className="text-xs font-semibold text-red-700">Plano expirado</span>
         </div>
         <p className="text-[11px] text-red-500 leading-relaxed">
-          Toque para escolher um plano.
+          {reason}
         </p>
       </button>
     );
