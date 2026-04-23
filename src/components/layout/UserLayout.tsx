@@ -72,12 +72,12 @@ function UserLayoutInner() {
         <main className="flex-1">
           <Outlet />
         </main>
-        <footer className="py-6 flex items-center justify-center gap-2 opacity-40">
-          <div className="w-6 h-6 bg-gray-900 rounded-lg flex items-center justify-center">
-            <Brain size={12} className="text-white" />
+        <div className="py-6 flex items-center justify-center gap-2">
+          <div className="w-8 h-8 bg-gray-900 rounded-xl flex items-center justify-center">
+            <Brain size={16} className="text-white" />
           </div>
-          <span className="text-xs font-medium text-gray-500 tracking-tight">BrainLead</span>
-        </footer>
+          <span className="font-semibold text-gray-900">BrainLead</span>
+        </div>
       </div>
 
       {/* Account disabled overlay */}
