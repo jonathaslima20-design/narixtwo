@@ -1,0 +1,481 @@
+import { createClient } from "npm:@supabase/supabase-js@2.80.0";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-Client-Info, Apikey",
+};
+
+function json(status: number, data: unknown) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function onlyDigits(raw: string): string {
+  return (raw || "").replace(/\D/g, "");
+}
+
+function normalizeBrPhone(raw: string): string {
+  const digits = onlyDigits(raw);
+  if (!digits) return "";
+  if (digits.startsWith("55")) {
+    const rest = digits.slice(2);
+    if (rest.length === 10) {
+      const ddd = rest.slice(0, 2);
+      const first = rest.charAt(2);
+      const subscriber = rest.slice(2);
+      if (/[6-9]/.test(first)) return `55${ddd}9${subscriber}`;
+    }
+    return digits;
+  }
+  if (digits.length === 11) {
+    const first = digits.charAt(2);
+    if (/[6-9]/.test(first)) return `55${digits}`;
+  }
+  if (digits.length === 10) {
+    const ddd = digits.slice(0, 2);
+    const first = digits.charAt(2);
+    const subscriber = digits.slice(2);
+    if (/[6-9]/.test(first)) return `55${ddd}9${subscriber}`;
+    return `55${digits}`;
+  }
+  return digits;
+}
+
+function extractEvolutionMessageId(payload: unknown): string {
+  const p = payload as Record<string, unknown> | null;
+  if (!p) return "";
+  const keyRoot = p.key as Record<string, unknown> | undefined;
+  if (keyRoot && typeof keyRoot.id === "string") return keyRoot.id;
+  const messages = p.messages as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(messages) && messages.length > 0) {
+    const first = messages[0];
+    const k = first?.key as Record<string, unknown> | undefined;
+    if (k && typeof k.id === "string") return k.id;
+  }
+  const maybeId = p.messageId ?? p.id;
+  if (typeof maybeId === "string") return maybeId;
+  return "";
+}
+
+function interpolateMessage(
+  template: string,
+  leadName: string,
+  phone: string,
+): string {
+  return (template || "")
+    .replace(/\{nome\}/gi, leadName || "")
+    .replace(/\{telefone\}/gi, phone || "");
+}
+
+function isWithinWindow(start: string, end: string): boolean {
+  if (!start || !end) return true;
+  const now = new Date();
+  const hh = now.getUTCHours() - 3;
+  const mm = now.getUTCMinutes();
+  const current = (hh < 0 ? hh + 24 : hh) * 60 + mm;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  return current >= startMin && current <= endMin;
+}
+
+const BUDGET_MS = 100_000;
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  try {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.replace("Bearer ", "").trim();
+    if (!token) return json(401, { error: "Missing authorization token" });
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
+    });
+    if (!userRes.ok) return json(401, { error: "Invalid authentication" });
+    const user = (await userRes.json()) as { id?: string };
+    if (!user?.id) return json(401, { error: "Invalid authentication" });
+
+    const body = await req.json().catch(() => ({}));
+    const campaignId = (body?.campaign_id as string | undefined)?.trim();
+    if (!campaignId) return json(400, { error: "campaign_id é obrigatório" });
+
+    const admin = createClient(supabaseUrl, serviceKey);
+
+    const { data: campaign, error: campErr } = await admin
+      .from("campaigns")
+      .select("*")
+      .eq("id", campaignId)
+      .maybeSingle();
+
+    if (campErr || !campaign)
+      return json(404, { error: "Campanha não encontrada" });
+    if (campaign.user_id !== user.id)
+      return json(403, { error: "Acesso negado" });
+    if (
+      campaign.status !== "sending" &&
+      campaign.status !== "scheduled" &&
+      campaign.status !== "draft"
+    ) {
+      return json(400, {
+        error: `Campanha com status '${campaign.status}' não pode ser enviada`,
+      });
+    }
+
+    if (campaign.status !== "sending") {
+      await admin
+        .from("campaigns")
+        .update({
+          status: "sending",
+          started_at: campaign.started_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", campaignId);
+    }
+
+    const { data: instance } = await admin
+      .from("whatsapp_instances")
+      .select("instance_name, status, evolution_api_key")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!instance)
+      return json(400, { error: "Nenhuma instância do WhatsApp configurada" });
+
+    const { data: settings } = await admin
+      .from("admin_settings")
+      .select("key, value")
+      .in("key", ["EVOLUTION_API_URL", "EVOLUTION_GLOBAL_KEY"]);
+
+    const evoUrl = settings
+      ?.find((s: { key: string }) => s.key === "EVOLUTION_API_URL")
+      ?.value?.replace(/\/+$/, "");
+    const evoKey = settings?.find(
+      (s: { key: string }) => s.key === "EVOLUTION_GLOBAL_KEY",
+    )?.value;
+
+    if (!evoUrl || !evoKey)
+      return json(400, { error: "Evolution API não configurada" });
+
+    const instanceKey =
+      (instance as { evolution_api_key?: string }).evolution_api_key?.trim() ||
+      "";
+    const apiKeyForInstance = instanceKey || evoKey;
+    const evoHeaders = {
+      "Content-Type": "application/json",
+      apikey: apiKeyForInstance,
+    };
+    const instanceName = instance.instance_name;
+
+    try {
+      const stateRes = await fetch(
+        `${evoUrl}/instance/connectionState/${encodeURIComponent(instanceName)}`,
+        { method: "GET", headers: evoHeaders },
+      );
+      const stateJson = (await stateRes.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      const stateValue =
+        stateJson?.instance &&
+        (
+          (stateJson as Record<string, Record<string, unknown>>).instance
+            ?.state as string
+        );
+      const rootState = stateJson?.state as string | undefined;
+      const currentState = (stateValue || rootState || "")
+        .toString()
+        .toLowerCase();
+      if (!stateRes.ok || currentState !== "open") {
+        await admin
+          .from("campaigns")
+          .update({ status: "paused", updated_at: new Date().toISOString() })
+          .eq("id", campaignId);
+        return json(409, {
+          error: "WhatsApp desconectado. Campanha pausada.",
+        });
+      }
+    } catch {
+      await admin
+        .from("campaigns")
+        .update({ status: "paused", updated_at: new Date().toISOString() })
+        .eq("id", campaignId);
+      return json(502, {
+        error:
+          "Não foi possível verificar a conexão com a Evolution. Campanha pausada.",
+      });
+    }
+
+    let mediaBase64 = "";
+    if (campaign.message_type !== "text" && campaign.media_url) {
+      if (
+        campaign.media_url.startsWith("http://") ||
+        campaign.media_url.startsWith("https://")
+      ) {
+        mediaBase64 = campaign.media_url;
+      } else {
+        const { data: file } = await admin.storage
+          .from("campaign-media")
+          .download(campaign.media_url);
+        if (file) {
+          const buf = new Uint8Array(await file.arrayBuffer());
+          let binary = "";
+          for (let i = 0; i < buf.length; i++)
+            binary += String.fromCharCode(buf[i]);
+          mediaBase64 = btoa(binary);
+        }
+      }
+    }
+
+    const { data: recipients } = await admin
+      .from("campaign_recipients")
+      .select("id, lead_id, phone, lead_name, status")
+      .eq("campaign_id", campaignId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
+      .limit(500);
+
+    if (!recipients || recipients.length === 0) {
+      await admin
+        .from("campaigns")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", campaignId);
+      return json(200, {
+        completed: true,
+        sent: 0,
+        failed: 0,
+        remaining: 0,
+      });
+    }
+
+    const delayMs = Math.max(500, campaign.delay_ms ?? 3000);
+    const startTime = Date.now();
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const recipient of recipients) {
+      if (Date.now() - startTime > BUDGET_MS) break;
+
+      if (!isWithinWindow(campaign.send_window_start, campaign.send_window_end)) break;
+
+      const { data: freshCampaign } = await admin
+        .from("campaigns")
+        .select("status")
+        .eq("id", campaignId)
+        .maybeSingle();
+
+      if (
+        !freshCampaign ||
+        freshCampaign.status === "paused" ||
+        freshCampaign.status === "cancelled"
+      ) {
+        break;
+      }
+
+      const phone = recipient.phone;
+      const isLid = phone.startsWith("lid:") || phone.endsWith("@lid");
+      let number: string;
+      if (isLid) {
+        number = phone;
+      } else {
+        const normalized = normalizeBrPhone(phone);
+        if (!normalized) {
+          await admin
+            .from("campaign_recipients")
+            .update({ status: "skipped", error_message: "Número inválido" })
+            .eq("id", recipient.id);
+          failedCount++;
+          continue;
+        }
+        number = normalized;
+      }
+
+      await admin
+        .from("campaign_recipients")
+        .update({ status: "sending" })
+        .eq("id", recipient.id);
+
+      const messageContent = interpolateMessage(
+        campaign.content,
+        recipient.lead_name,
+        recipient.phone,
+      );
+      const captionContent = interpolateMessage(
+        campaign.caption || "",
+        recipient.lead_name,
+        recipient.phone,
+      );
+
+      let sendRes: Response;
+      try {
+        if (campaign.message_type === "text") {
+          sendRes = await fetch(
+            `${evoUrl}/message/sendText/${encodeURIComponent(instanceName)}`,
+            {
+              method: "POST",
+              headers: evoHeaders,
+              body: JSON.stringify({
+                number,
+                text: messageContent,
+                linkPreview: false,
+              }),
+            },
+          );
+        } else if (campaign.message_type === "audio") {
+          sendRes = await fetch(
+            `${evoUrl}/message/sendWhatsAppAudio/${encodeURIComponent(instanceName)}`,
+            {
+              method: "POST",
+              headers: evoHeaders,
+              body: JSON.stringify({
+                number,
+                audio: mediaBase64,
+                encoding: true,
+              }),
+            },
+          );
+        } else {
+          const isUrl =
+            mediaBase64.startsWith("http://") ||
+            mediaBase64.startsWith("https://");
+          sendRes = await fetch(
+            `${evoUrl}/message/sendMedia/${encodeURIComponent(instanceName)}`,
+            {
+              method: "POST",
+              headers: evoHeaders,
+              body: JSON.stringify({
+                number,
+                mediatype:
+                  campaign.message_type === "image" ? "image" : "document",
+                mimetype: campaign.media_type || "application/octet-stream",
+                caption: captionContent || messageContent,
+                media: isUrl ? mediaBase64 : mediaBase64,
+                fileName: campaign.media_filename || "file",
+              }),
+            },
+          );
+        }
+      } catch (err) {
+        await admin
+          .from("campaign_recipients")
+          .update({
+            status: "failed",
+            error_message:
+              err instanceof Error ? err.message : "Erro de rede",
+          })
+          .eq("id", recipient.id);
+        failedCount++;
+        continue;
+      }
+
+      const rawText = await sendRes.text();
+      let sendJson: unknown = {};
+      try {
+        sendJson = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        sendJson = { raw: rawText.slice(0, 500) };
+      }
+
+      const waId = extractEvolutionMessageId(sendJson);
+
+      if (sendRes.ok && waId) {
+        await admin
+          .from("campaign_recipients")
+          .update({
+            status: "sent",
+            whatsapp_message_id: waId,
+            sent_at: new Date().toISOString(),
+          })
+          .eq("id", recipient.id);
+        sentCount++;
+      } else {
+        const errMsg =
+          typeof (sendJson as Record<string, unknown>)?.message === "string"
+            ? ((sendJson as Record<string, unknown>).message as string)
+            : `HTTP ${sendRes.status}`;
+        await admin
+          .from("campaign_recipients")
+          .update({
+            status: "failed",
+            error_message: errMsg,
+          })
+          .eq("id", recipient.id);
+        failedCount++;
+      }
+
+      await admin
+        .from("campaigns")
+        .update({
+          sent_count: (campaign.sent_count ?? 0) + sentCount,
+          failed_count: (campaign.failed_count ?? 0) + failedCount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", campaignId);
+
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+
+    const { data: finalRecipients } = await admin
+      .from("campaign_recipients")
+      .select("status")
+      .eq("campaign_id", campaignId);
+
+    const finalSent =
+      finalRecipients?.filter(
+        (r: { status: string }) =>
+          r.status === "sent" ||
+          r.status === "delivered" ||
+          r.status === "read",
+      ).length ?? 0;
+    const finalFailed =
+      finalRecipients?.filter(
+        (r: { status: string }) =>
+          r.status === "failed" || r.status === "skipped",
+      ).length ?? 0;
+    const finalPending =
+      finalRecipients?.filter(
+        (r: { status: string }) =>
+          r.status === "pending" || r.status === "sending",
+      ).length ?? 0;
+
+    const isComplete = finalPending === 0;
+
+    await admin
+      .from("campaigns")
+      .update({
+        sent_count: finalSent,
+        failed_count: finalFailed,
+        ...(isComplete
+          ? { status: "completed", completed_at: new Date().toISOString() }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", campaignId);
+
+    return json(200, {
+      completed: isComplete,
+      sent: sentCount,
+      failed: failedCount,
+      remaining: finalPending,
+      elapsed_ms: Date.now() - startTime,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro desconhecido";
+    return json(500, { error: message });
+  }
+});
