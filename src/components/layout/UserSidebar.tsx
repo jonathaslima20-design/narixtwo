@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X, Send, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../lib/AuthContext';
 import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
+import { PricingModal } from '../ui/PricingModal';
 
 const navItems = [
   { to: '/dashboard', icon: Home, label: 'Inicio', end: true, alwaysEnabled: true },
@@ -15,6 +17,7 @@ const navItems = [
 export function UserSidebar({ onClose }: { onClose?: () => void }) {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const [showPricing, setShowPricing] = useState(false);
 
   let isBlocked = false;
   let plan: { slug?: string; name?: string; max_sends?: number } | null = null;
@@ -33,8 +36,6 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
   } catch {
     // SubscriptionProvider may not be mounted yet
   }
-
-  const planLabel = isTrial ? 'Trial' : plan?.name ?? '';
 
   async function handleSignOut() {
     await signOut();
@@ -100,8 +101,11 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
           remainingSends={remainingSends}
           daysLeft={daysLeft}
           maxSends={plan?.max_sends ?? -1}
+          onClick={() => setShowPricing(true)}
         />
       </div>
+
+      <PricingModal open={showPricing} onClose={() => setShowPricing(false)} />
 
       <div className="px-3 py-4 border-t border-gray-100">
         <div className="px-3 py-2 mb-1">
@@ -131,6 +135,7 @@ function SidebarPlanWidget({
   remainingSends,
   daysLeft,
   maxSends,
+  onClick,
 }: {
   planName: string;
   isTrial: boolean;
@@ -139,18 +144,21 @@ function SidebarPlanWidget({
   remainingSends: number;
   daysLeft: number;
   maxSends: number;
+  onClick: () => void;
 }) {
+  const base = 'w-full text-left rounded-2xl p-3.5 transition-all duration-150 cursor-pointer';
+
   if (isBlocked) {
     return (
-      <div className="rounded-2xl bg-red-50 border border-red-100 p-3.5">
+      <button onClick={onClick} className={`${base} bg-red-50 border border-red-100 hover:bg-red-100/70`}>
         <div className="flex items-center gap-2 mb-1">
           <AlertTriangle size={13} className="text-red-500" />
           <span className="text-xs font-semibold text-red-700">Plano expirado</span>
         </div>
         <p className="text-[11px] text-red-500 leading-relaxed">
-          Escolha um plano para continuar usando o sistema.
+          Toque para escolher um plano.
         </p>
-      </div>
+      </button>
     );
   }
 
@@ -159,7 +167,7 @@ function SidebarPlanWidget({
     const barColor = sendPct >= 80 ? 'bg-red-500' : sendPct >= 50 ? 'bg-amber-500' : 'bg-gray-900';
 
     return (
-      <div className="rounded-2xl bg-gray-50 border border-gray-100 p-3.5">
+      <button onClick={onClick} className={`${base} bg-gray-50 border border-gray-100 hover:bg-gray-100/80`}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-1.5">
             <Clock size={12} className="text-amber-500" />
@@ -188,14 +196,14 @@ function SidebarPlanWidget({
           </div>
           <p className="text-[10px] text-gray-400 mt-1">{remainingSends} restante{remainingSends !== 1 ? 's' : ''}</p>
         </div>
-      </div>
+      </button>
     );
   }
 
   if (!planName) return null;
 
   return (
-    <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-3.5">
+    <button onClick={onClick} className={`${base} bg-emerald-50 border border-emerald-100 hover:bg-emerald-100/70`}>
       <div className="flex items-center gap-2">
         <CheckCircle size={13} className="text-emerald-500" />
         <div>
@@ -203,6 +211,6 @@ function SidebarPlanWidget({
           <span className="text-[10px] text-emerald-600">Envios ilimitados</span>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
