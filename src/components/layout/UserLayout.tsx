@@ -72,7 +72,7 @@ function UserLayoutInner() {
         <main className="flex-1">
           <Outlet />
         </main>
-        <div className="py-6 flex items-center justify-center gap-2">
+        <div className="py-6 flex items-center justify-center gap-2 lg:hidden">
           <div className="w-8 h-8 bg-gray-900 rounded-xl flex items-center justify-center">
             <Brain size={16} className="text-white" />
           </div>
