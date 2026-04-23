@@ -52,14 +52,7 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
           <div className="w-8 h-8 bg-gray-900 rounded-xl flex items-center justify-center">
             <Brain size={16} className="text-white" />
           </div>
-          <div>
-            <span className="font-semibold text-gray-900 text-base tracking-tight block leading-tight">BrainLead</span>
-            {planLabel && (
-              <span className={`text-[10px] font-medium leading-none ${isTrial ? 'text-amber-600' : 'text-emerald-600'}`}>
-                {planLabel}
-              </span>
-            )}
-          </div>
+          <span className="font-semibold text-gray-900 text-base tracking-tight">BrainLead</span>
         </div>
         {onClose && (
           <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
