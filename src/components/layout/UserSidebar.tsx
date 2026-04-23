@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X } from 'lucide-react';
+import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X, Send, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../lib/AuthContext';
 import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
@@ -17,13 +17,19 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
   const navigate = useNavigate();
 
   let isBlocked = false;
-  let plan: { slug?: string; name?: string } | null = null;
+  let plan: { slug?: string; name?: string; max_sends?: number } | null = null;
   let isTrial = false;
+  let sendCount = 0;
+  let remainingSends = 0;
+  let daysLeft = 0;
   try {
     const sub = useSubscriptionCtx();
     isBlocked = sub.isBlocked;
     plan = sub.plan;
     isTrial = sub.isTrial;
+    sendCount = sub.sendCount;
+    remainingSends = sub.remainingSends;
+    daysLeft = sub.daysLeft;
   } catch {
     // SubscriptionProvider may not be mounted yet
   }
@@ -92,6 +98,18 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
         })}
       </nav>
 
+      <div className="px-3 pb-3">
+        <SidebarPlanWidget
+          planName={plan?.name ?? ''}
+          isTrial={isTrial}
+          isBlocked={isBlocked}
+          sendCount={sendCount}
+          remainingSends={remainingSends}
+          daysLeft={daysLeft}
+          maxSends={plan?.max_sends ?? -1}
+        />
+      </div>
+
       <div className="px-3 py-4 border-t border-gray-100">
         <div className="px-3 py-2 mb-1">
           <p className="text-xs font-medium text-gray-900 truncate">
@@ -109,5 +127,89 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
         </motion.button>
       </div>
     </aside>
+  );
+}
+
+function SidebarPlanWidget({
+  planName,
+  isTrial,
+  isBlocked,
+  sendCount,
+  remainingSends,
+  daysLeft,
+  maxSends,
+}: {
+  planName: string;
+  isTrial: boolean;
+  isBlocked: boolean;
+  sendCount: number;
+  remainingSends: number;
+  daysLeft: number;
+  maxSends: number;
+}) {
+  if (isBlocked) {
+    return (
+      <div className="rounded-2xl bg-red-50 border border-red-100 p-3.5">
+        <div className="flex items-center gap-2 mb-1">
+          <AlertTriangle size={13} className="text-red-500" />
+          <span className="text-xs font-semibold text-red-700">Plano expirado</span>
+        </div>
+        <p className="text-[11px] text-red-500 leading-relaxed">
+          Escolha um plano para continuar usando o sistema.
+        </p>
+      </div>
+    );
+  }
+
+  if (isTrial) {
+    const sendPct = maxSends > 0 ? Math.min(100, Math.round((sendCount / maxSends) * 100)) : 0;
+    const barColor = sendPct >= 80 ? 'bg-red-500' : sendPct >= 50 ? 'bg-amber-500' : 'bg-gray-900';
+
+    return (
+      <div className="rounded-2xl bg-gray-50 border border-gray-100 p-3.5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-1.5">
+            <Clock size={12} className="text-amber-500" />
+            <span className="text-xs font-semibold text-gray-900">Trial</span>
+          </div>
+          <span className="text-[10px] font-medium text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-100">
+            {daysLeft}d restante{daysLeft !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        <div className="mb-1.5">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-1">
+              <Send size={10} className="text-gray-400" />
+              <span className="text-[11px] text-gray-500">Envios</span>
+            </div>
+            <span className="text-[11px] font-medium text-gray-700">{sendCount}/{maxSends}</span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <motion.div
+              className={`h-full rounded-full ${barColor}`}
+              initial={{ width: 0 }}
+              animate={{ width: `${sendPct}%` }}
+              transition={{ duration: 0.6, ease: 'easeOut' }}
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1">{remainingSends} restante{remainingSends !== 1 ? 's' : ''}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!planName) return null;
+
+  return (
+    <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-3.5">
+      <div className="flex items-center gap-2">
+        <CheckCircle size={13} className="text-emerald-500" />
+        <div>
+          <span className="text-xs font-semibold text-emerald-800 block leading-tight">{planName}</span>
+          <span className="text-[10px] text-emerald-600">Envios ilimitados</span>
+        </div>
+      </div>
+    </div>
   );
 }
