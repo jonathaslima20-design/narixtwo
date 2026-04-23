@@ -81,7 +81,7 @@ export function AuthPage() {
             O Sistema que transforma Leads em vendas.
           </h2>
           <p className="text-gray-400 text-base leading-relaxed">
-            Qualifique seus Leads, crie campanhas de ofertas e impulsione suas vendas.
+            Organize seus contatos, gerencie conversas e dispare ofertas de forma simples e eficiente.
           </p>
 
           <div className="mt-10 space-y-4">
