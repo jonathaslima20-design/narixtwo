@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, User, Zap, Brain, ArrowRight } from 'lucide-react';
+import { Mail, Lock, User, Brain, ArrowRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../components/ui/Button';
@@ -113,7 +113,7 @@ export function AuthPage() {
         >
           <div className="flex items-center gap-2 mb-8 lg:hidden">
             <div className="w-8 h-8 bg-gray-900 rounded-xl flex items-center justify-center">
-              <Zap size={16} className="text-white" />
+              <Brain size={16} className="text-white" />
             </div>
             <span className="font-semibold text-gray-900">BrainLead</span>
           </div>

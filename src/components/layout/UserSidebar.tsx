@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, MessageCircle, LogOut, Zap, Users, Megaphone, Settings, X } from 'lucide-react';
+import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../lib/AuthContext';
 
@@ -29,7 +29,7 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
       <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-gray-900 rounded-xl flex items-center justify-center">
-            <Zap size={16} className="text-white" />
+            <Brain size={16} className="text-white" />
           </div>
           <span className="font-semibold text-gray-900 text-base tracking-tight">BrainLead</span>
         </div>
