@@ -86,7 +86,7 @@ export function AuthPage() {
 
           <div className="mt-10 space-y-4">
             {[
-              { label: 'Chat Integrado', sub: 'Conecte seu WhatsApp para a coleta de Leads' },
+              { label: 'Chat Integrado', sub: 'Conecte seu WhatsApp e centralize sua coleta de leads.' },
               { label: 'Qualificação', sub: 'Qualifique e organize seus Leads em categorias' },
               { label: 'Campanhas de Envio de WhatsApp', sub: 'Converta vendas com envios em massa' },
             ].map((item) => (
