@@ -13,6 +13,7 @@ import { CampaignDetail } from './pages/dashboard/CampaignDetail';
 import { AdminOverview } from './pages/admin/AdminOverview';
 import { ClientManagement } from './pages/admin/ClientManagement';
 import { PlanManagement } from './pages/admin/PlanManagement';
+import { CheckoutSettings } from './pages/admin/CheckoutSettings';
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
             <Route index element={<AdminOverview />} />
             <Route path="plans" element={<PlanManagement />} />
             <Route path="clients" element={<ClientManagement />} />
+            <Route path="checkout" element={<CheckoutSettings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

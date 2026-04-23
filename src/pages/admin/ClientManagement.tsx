@@ -14,6 +14,9 @@ import {
   CalendarPlus,
   Save,
   ChevronDown,
+  Send,
+  Power,
+  RotateCcw,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/Card';
@@ -35,11 +38,13 @@ interface ClientRow extends Profile {
   plan_id?: string;
   plan_name?: string;
   plan_slug?: string;
+  plan_max_sends?: number;
   sub_status?: SubscriptionStatus;
   sub_started_at?: string;
   sub_expires_at?: string | null;
   sub_cancelled_at?: string | null;
   sub_notes?: string;
+  send_count: number;
 }
 
 const SUB_STATUS_MAP: Record<SubscriptionStatus, { label: string; variant: 'success' | 'warning' | 'neutral' | 'error' | 'info' }> = {
@@ -115,11 +120,13 @@ export function ClientManagement() {
           plan_id: sub?.plan_id,
           plan_name: plan?.name || 'Sem plano',
           plan_slug: plan?.slug,
+          plan_max_sends: plan?.max_sends ?? -1,
           sub_status: sub?.status as SubscriptionStatus | undefined,
           sub_started_at: sub?.started_at,
           sub_expires_at: sub?.expires_at,
           sub_cancelled_at: sub?.cancelled_at,
           sub_notes: sub?.notes || '',
+          send_count: sub?.send_count ?? 0,
         } as ClientRow;
       }),
     );
@@ -159,20 +166,18 @@ export function ClientManagement() {
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          {/* Header */}
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
               <div className="w-10 h-10 bg-gray-900 rounded-2xl flex items-center justify-center">
                 <Users size={18} className="text-white" />
               </div>
-              Gestão de Clientes
+              Gestao de Clientes
             </h1>
             <p className="text-sm text-gray-500 mt-1.5 ml-[52px]">
               {clients.length} clientes cadastrados
             </p>
           </div>
 
-          {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Card>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
@@ -190,7 +195,6 @@ export function ClientManagement() {
             ))}
           </div>
 
-          {/* Filters */}
           <div className="flex flex-wrap items-stretch gap-3 mb-6">
             <div className="w-full sm:flex-1 sm:min-w-[200px] sm:max-w-xs">
               <Input
@@ -231,7 +235,6 @@ export function ClientManagement() {
             />
           </div>
 
-          {/* Client list */}
           {loading ? (
             <div className="space-y-3">
               {[...Array(6)].map((_, i) => (
@@ -257,7 +260,6 @@ export function ClientManagement() {
         </motion.div>
       </div>
 
-      {/* Client detail modal */}
       {selectedClient && (
         <ClientDetailModal
           client={selectedClient}
@@ -302,14 +304,16 @@ function ClientCard({ client, onClick }: { client: ClientRow; onClick: () => voi
   const subInfo = SUB_STATUS_MAP[client.sub_status || 'active'] || SUB_STATUS_MAP.active;
   const planBadgeColor = client.plan_slug === 'anual'
     ? 'bg-amber-50 text-amber-700 border border-amber-200'
-    : 'bg-sky-50 text-sky-700 border border-sky-200';
+    : client.plan_slug === 'trial'
+      ? 'bg-sky-50 text-sky-600 border border-sky-200'
+      : 'bg-sky-50 text-sky-700 border border-sky-200';
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={onClick}
-      className="bg-white border border-gray-100 rounded-2xl px-5 py-4 flex items-center gap-4 cursor-pointer hover:shadow-sm transition-shadow"
+      className={`bg-white border rounded-2xl px-5 py-4 flex items-center gap-4 cursor-pointer hover:shadow-sm transition-shadow ${client.is_enabled === false ? 'border-red-200 opacity-60' : 'border-gray-100'}`}
     >
       <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-sm font-bold text-gray-600 shrink-0">
         {(client.full_name || client.email).charAt(0).toUpperCase()}
@@ -324,6 +328,9 @@ function ClientCard({ client, onClick }: { client: ClientRow; onClick: () => voi
             {client.plan_name}
           </span>
           <Badge variant={subInfo.variant} size="sm">{subInfo.label}</Badge>
+          {client.is_enabled === false && (
+            <Badge variant="error" size="sm">Desativado</Badge>
+          )}
         </div>
         <p className="text-xs text-gray-400 flex items-center gap-1">
           <Mail size={11} />
@@ -332,6 +339,10 @@ function ClientCard({ client, onClick }: { client: ClientRow; onClick: () => voi
       </div>
 
       <div className="flex items-center gap-6 shrink-0">
+        <div className="text-center hidden sm:block">
+          <p className="text-sm font-bold text-gray-900">{client.send_count}</p>
+          <p className="text-xs text-gray-400">Envios</p>
+        </div>
         <div className="text-center hidden sm:block">
           <p className="text-sm font-bold text-gray-900">{client.lead_count}</p>
           <p className="text-xs text-gray-400">Leads</p>
@@ -381,6 +392,9 @@ function ClientDetailModal({
   );
   const [savingExpiry, setSavingExpiry] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [togglingEnabled, setTogglingEnabled] = useState(false);
+  const [editSendCount, setEditSendCount] = useState(String(client.send_count));
+  const [savingSendCount, setSavingSendCount] = useState(false);
 
   const currentPlan = plans.find((p) => p.id === client.plan_id);
   const subInfo = SUB_STATUS_MAP[client.sub_status || 'active'] || SUB_STATUS_MAP.active;
@@ -397,6 +411,7 @@ function ClientDetailModal({
         plan_id: selectedPlanId,
         plan_name: newPlan?.name || 'Sem plano',
         plan_slug: newPlan?.slug,
+        plan_max_sends: newPlan?.max_sends ?? -1,
         sub_status: 'active',
         sub_started_at: new Date().toISOString(),
         sub_cancelled_at: null,
@@ -455,6 +470,58 @@ function ClientDetailModal({
     }
   }
 
+  async function handleToggleEnabled() {
+    setTogglingEnabled(true);
+    try {
+      const newVal = !client.is_enabled;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_enabled: newVal, updated_at: new Date().toISOString() })
+        .eq('id', client.id);
+      if (error) throw error;
+      onUpdated({ ...client, is_enabled: newVal });
+    } catch {
+      alert('Erro ao alterar status da conta.');
+    } finally {
+      setTogglingEnabled(false);
+    }
+  }
+
+  async function handleSaveSendCount() {
+    const val = parseInt(editSendCount, 10);
+    if (isNaN(val) || val < 0) return;
+    setSavingSendCount(true);
+    try {
+      const { error } = await supabase
+        .from('client_subscriptions')
+        .update({ send_count: val, updated_at: new Date().toISOString() })
+        .eq('user_id', client.id);
+      if (error) throw error;
+      onUpdated({ ...client, send_count: val });
+    } catch {
+      alert('Erro ao salvar contador.');
+    } finally {
+      setSavingSendCount(false);
+    }
+  }
+
+  async function handleResetSendCount() {
+    setSavingSendCount(true);
+    try {
+      const { error } = await supabase
+        .from('client_subscriptions')
+        .update({ send_count: 0, updated_at: new Date().toISOString() })
+        .eq('user_id', client.id);
+      if (error) throw error;
+      setEditSendCount('0');
+      onUpdated({ ...client, send_count: 0 });
+    } catch {
+      alert('Erro ao resetar contador.');
+    } finally {
+      setSavingSendCount(false);
+    }
+  }
+
   function usageBar(used: number, limit: number) {
     if (limit === -1) {
       return (
@@ -503,7 +570,10 @@ function ClientDetailModal({
                 {(client.full_name || client.email).charAt(0).toUpperCase()}
               </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-900">{client.full_name || 'Sem nome'}</h2>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  {client.full_name || 'Sem nome'}
+                  {client.is_enabled === false && <Badge variant="error" size="sm">Desativado</Badge>}
+                </h2>
                 <p className="text-sm text-gray-500">{client.email}</p>
               </div>
             </div>
@@ -516,6 +586,37 @@ function ClientDetailModal({
           </div>
 
           <div className="p-6 space-y-6">
+            {/* Account status */}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Power size={14} className="text-gray-400" />
+                Status da Conta
+              </h3>
+              <div className="flex items-center justify-between bg-gray-50 rounded-xl p-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    Conta {client.is_enabled !== false ? 'Ativa' : 'Desativada'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {client.is_enabled !== false
+                      ? 'O usuario pode acessar o sistema normalmente.'
+                      : 'O usuario esta impedido de acessar o sistema.'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleToggleEnabled}
+                  disabled={togglingEnabled}
+                  className={`px-4 py-2 rounded-xl text-xs font-medium transition-colors disabled:opacity-50 ${
+                    client.is_enabled !== false
+                      ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                      : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                  }`}
+                >
+                  {client.is_enabled !== false ? 'Desativar' : 'Ativar'}
+                </button>
+              </div>
+            </section>
+
             {/* Subscription section */}
             <section>
               <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -531,12 +632,12 @@ function ClientDetailModal({
                     </div>
                     {currentPlan && (
                       <p className="text-sm text-gray-500">
-                        {formatBRL(currentPlan.price_cents)}{currentPlan.billing_period === 'monthly' ? '/mês' : '/ano'}
+                        {formatBRL(currentPlan.price_cents)}{currentPlan.billing_period === 'monthly' ? '/mes' : '/ano'}
                       </p>
                     )}
                   </div>
                   <div className="text-right text-xs text-gray-500">
-                    <p>Início: {formatDate(client.sub_started_at)}</p>
+                    <p>Inicio: {formatDate(client.sub_started_at)}</p>
                     {client.sub_expires_at && <p>Expira: {formatDate(client.sub_expires_at)}</p>}
                   </div>
                 </div>
@@ -592,7 +693,7 @@ function ClientDetailModal({
                         <option value="">Selecione um plano</option>
                         {plans.filter((p) => p.is_active).map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.name} - {formatBRL(p.price_cents)}/{p.billing_period === 'monthly' ? 'mês' : 'ano'}
+                            {p.name} - {formatBRL(p.price_cents)}/{p.billing_period === 'monthly' ? 'mes' : 'ano'}
                           </option>
                         ))}
                       </select>
@@ -631,6 +732,47 @@ function ClientDetailModal({
               {client.sub_expires_at && (
                 <p className="text-xs text-gray-400 mt-1.5">Expira atualmente em: {formatDate(client.sub_expires_at)}</p>
               )}
+            </section>
+
+            {/* Send count */}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Send size={14} className="text-gray-400" />
+                Contador de Envios
+              </h3>
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm text-gray-600">Envios realizados:</span>
+                  <span className="text-sm font-bold text-gray-900">{client.send_count}</span>
+                  {client.plan_max_sends !== undefined && client.plan_max_sends !== -1 && (
+                    <span className="text-xs text-gray-400">/ {client.plan_max_sends}</span>
+                  )}
+                  {(client.plan_max_sends === undefined || client.plan_max_sends === -1) && (
+                    <span className="text-xs text-gray-400">/ Ilimitado</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={editSendCount}
+                    onChange={(e) => setEditSendCount(e.target.value)}
+                    className="w-24 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                  />
+                  <Button size="sm" loading={savingSendCount} onClick={handleSaveSendCount}>
+                    <Save size={12} />
+                    Salvar
+                  </Button>
+                  <button
+                    onClick={handleResetSendCount}
+                    disabled={savingSendCount}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                  >
+                    <RotateCcw size={12} />
+                    Resetar
+                  </button>
+                </div>
+              </div>
             </section>
 
             {/* Usage & Limits */}

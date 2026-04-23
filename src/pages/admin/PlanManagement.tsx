@@ -37,6 +37,8 @@ type PlanForm = {
   max_templates: number;
   max_automation_rules: number;
   max_ai_tokens_per_month: number;
+  max_sends: number;
+  trial_duration_days: number;
   sort_order: number;
 };
 
@@ -53,6 +55,8 @@ const EMPTY_FORM: PlanForm = {
   max_templates: -1,
   max_automation_rules: -1,
   max_ai_tokens_per_month: -1,
+  max_sends: -1,
+  trial_duration_days: 0,
   sort_order: 0,
 };
 
@@ -63,7 +67,8 @@ const LIMIT_FIELDS: { key: keyof PlanForm; label: string; icon: typeof Users }[]
   { key: 'max_whatsapp_instances', label: 'Instâncias WhatsApp', icon: Smartphone },
   { key: 'max_templates', label: 'Templates', icon: FileText },
   { key: 'max_automation_rules', label: 'Regras de automação', icon: Settings2 },
-  { key: 'max_ai_tokens_per_month', label: 'Tokens IA / mês', icon: Zap },
+  { key: 'max_ai_tokens_per_month', label: 'Tokens IA / mes', icon: Zap },
+  { key: 'max_sends', label: 'Limite de envios', icon: Send },
 ];
 
 function formatBRL(cents: number) {
@@ -124,6 +129,8 @@ export function PlanManagement() {
       max_templates: plan.max_templates,
       max_automation_rules: plan.max_automation_rules,
       max_ai_tokens_per_month: plan.max_ai_tokens_per_month,
+      max_sends: plan.max_sends ?? -1,
+      trial_duration_days: plan.trial_duration_days ?? 0,
       sort_order: plan.sort_order,
     });
     setModalOpen(true);
@@ -150,6 +157,8 @@ export function PlanManagement() {
         max_templates: form.max_templates,
         max_automation_rules: form.max_automation_rules,
         max_ai_tokens_per_month: form.max_ai_tokens_per_month,
+        max_sends: form.max_sends,
+        trial_duration_days: form.trial_duration_days,
         features: {},
         is_active: true,
         sort_order: form.sort_order,

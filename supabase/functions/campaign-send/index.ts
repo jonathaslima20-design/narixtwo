@@ -263,6 +263,24 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Check subscription quota for trial users
+    const { data: subRow } = await admin
+      .from("client_subscriptions")
+      .select("send_count, plan_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    let currentSendCount = subRow?.send_count ?? 0;
+    let maxSends = -1;
+    if (subRow?.plan_id) {
+      const { data: planRow } = await admin
+        .from("plans")
+        .select("max_sends")
+        .eq("id", subRow.plan_id)
+        .maybeSingle();
+      maxSends = planRow?.max_sends ?? -1;
+    }
+
     const delayMs = Math.max(500, campaign.delay_ms ?? 3000);
     const startTime = Date.now();
     let sentCount = 0;
@@ -285,6 +303,16 @@ Deno.serve(async (req: Request) => {
         freshCampaign.status === "cancelled"
       ) {
         break;
+      }
+
+      // Quota check: skip remaining if trial limit reached
+      if (maxSends !== -1 && currentSendCount >= maxSends) {
+        await admin
+          .from("campaign_recipients")
+          .update({ status: "skipped", error_message: "Limite de envios do plano atingido" })
+          .eq("id", recipient.id);
+        failedCount++;
+        continue;
       }
 
       const phone = recipient.phone;
@@ -403,6 +431,11 @@ Deno.serve(async (req: Request) => {
           })
           .eq("id", recipient.id);
         sentCount++;
+        currentSendCount++;
+        await admin
+          .from("client_subscriptions")
+          .update({ send_count: currentSendCount, updated_at: new Date().toISOString() })
+          .eq("user_id", user.id);
       } else {
         const errMsg =
           typeof (sendJson as Record<string, unknown>)?.message === "string"

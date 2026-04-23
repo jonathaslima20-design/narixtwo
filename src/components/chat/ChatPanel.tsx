@@ -8,6 +8,8 @@ import { ChatComposer } from './ChatComposer';
 import { PresenceIndicator, PresenceState } from './PresenceIndicator';
 import { RecordingResult } from '../../lib/useAudioRecorder';
 import { leadDisplayName, leadPhoneLabel, isPrivateContact } from '../../lib/leadDisplay';
+import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
+import { PricingModal } from '../ui/PricingModal';
 
 type LeadPatch = Partial<Lead> & { id: string };
 
@@ -59,8 +61,10 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
   const [retryPayloads, setRetryPayloads] = useState<Record<string, () => Promise<void>>>({});
   const [presence, setPresence] = useState<{ state: PresenceState; updatedAt: number } | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const headerMenuRef = useRef<HTMLDivElement>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const { isBlocked, incrementSendCount } = useSubscriptionCtx();
 
   useEffect(() => {
     if (!headerMenuOpen) return;
@@ -369,6 +373,7 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
   }
 
   async function sendMessage(content: string, aiGenerated = false) {
+    if (isBlocked) { setShowPaywall(true); return; }
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const optimistic: Message = {
       id: tempId,
@@ -472,6 +477,7 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
         last_activity_at: new Date().toISOString(),
         message_count: (lead.message_count || 0) + 1,
       });
+      incrementSendCount();
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Erro de rede';
       setMessages((m) =>
@@ -484,6 +490,7 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
   }
 
   async function sendAudio(result: RecordingResult) {
+    if (isBlocked) { setShowPaywall(true); return; }
     const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     if (result.blob.size > MAX_AUDIO_BYTES) {
@@ -610,6 +617,7 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
         last_activity_at: new Date().toISOString(),
         message_count: (lead.message_count || 0) + 1,
       });
+      incrementSendCount();
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Erro de rede';
       setMessages((m) =>
@@ -620,6 +628,7 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
   }
 
   async function sendImage(blob: Blob, caption: string) {
+    if (isBlocked) { setShowPaywall(true); return; }
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const localBlobUrl = URL.createObjectURL(blob);
     const optimistic: Message = {
@@ -682,6 +691,7 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
         last_activity_at: new Date().toISOString(),
         message_count: (lead.message_count || 0) + 1,
       });
+      incrementSendCount();
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Erro de rede';
       setMessages((m) => m.map((msg) => (msg.id === tempId ? { ...msg, status: 'failed' as const } : msg)));
@@ -923,6 +933,8 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
         onRejectSuggestion={rejectSuggestion}
         disabled={isDisconnected}
       />
+
+      <PricingModal open={showPaywall} onClose={() => setShowPaywall(false)} />
     </div>
   );
 }

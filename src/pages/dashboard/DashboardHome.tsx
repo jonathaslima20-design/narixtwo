@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, TrendingUp, ArrowRight } from 'lucide-react';
+import { Users, TrendingUp, ArrowRight, Clock, Send, CheckCircle, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
@@ -9,6 +9,7 @@ import { Lead } from '../../lib/types';
 import { leadDisplayName, leadPhoneLabel } from '../../lib/leadDisplay';
 import { useLeadCategories } from '../../lib/useLeadCategories';
 import { resolveIcon } from '../../lib/iconMap';
+import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
 
 const container = {
   hidden: { opacity: 0 },
@@ -23,6 +24,7 @@ const item = {
 export function DashboardHome() {
   const { profile } = useAuth();
   const { categories } = useLeadCategories();
+  const { plan, isTrial, sendCount, remainingSends, daysLeft, isBlocked } = useSubscriptionCtx();
   const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [recentLeads, setRecentLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +60,19 @@ export function DashboardHome() {
         <motion.div variants={item} className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Ola, {name}</h1>
           <p className="text-gray-500 text-sm mt-1">Aqui esta um resumo dos seus leads hoje.</p>
+        </motion.div>
+
+        {/* Plan status banner */}
+        <motion.div variants={item} className="mb-6">
+          <PlanBanner
+            planName={plan?.name ?? 'Sem plano'}
+            isTrial={isTrial}
+            sendCount={sendCount}
+            remainingSends={remainingSends}
+            daysLeft={daysLeft}
+            isBlocked={isBlocked}
+            maxSends={plan?.max_sends ?? -1}
+          />
         </motion.div>
 
         <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
@@ -147,6 +162,80 @@ export function DashboardHome() {
           </Card>
         </motion.div>
       </motion.div>
+    </div>
+  );
+}
+
+function PlanBanner({
+  planName,
+  isTrial,
+  sendCount,
+  remainingSends,
+  daysLeft,
+  isBlocked,
+  maxSends,
+}: {
+  planName: string;
+  isTrial: boolean;
+  sendCount: number;
+  remainingSends: number;
+  daysLeft: number;
+  isBlocked: boolean;
+  maxSends: number;
+}) {
+  if (isBlocked) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl">
+        <AlertTriangle size={16} className="text-red-500 shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-red-800">Plano expirado</p>
+          <p className="text-xs text-red-600">Seu periodo de teste terminou. Escolha um plano para continuar.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isTrial) {
+    const sendPct = maxSends > 0 ? Math.min(100, Math.round((sendCount / maxSends) * 100)) : 0;
+    const isLow = daysLeft <= 1 || remainingSends <= 5;
+    return (
+      <div className={`flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-2xl border ${isLow ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
+        <div className="flex items-center gap-2 shrink-0">
+          <Clock size={14} className={isLow ? 'text-amber-500' : 'text-sky-500'} />
+          <span className={`text-sm font-semibold ${isLow ? 'text-amber-800' : 'text-sky-800'}`}>Plano Trial</span>
+        </div>
+        <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 flex-1">
+            <Send size={12} className="text-gray-400 shrink-0" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-xs text-gray-600">{sendCount}/{maxSends} envios</span>
+                <span className="text-xs text-gray-400">{remainingSends} restantes</span>
+              </div>
+              <div className="w-full h-1.5 bg-white rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${sendPct >= 80 ? 'bg-red-500' : sendPct >= 50 ? 'bg-amber-500' : 'bg-sky-500'}`}
+                  style={{ width: `${sendPct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Clock size={12} className="text-gray-400" />
+            <span className="text-xs text-gray-600">{daysLeft} {daysLeft === 1 ? 'dia restante' : 'dias restantes'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-2xl">
+      <CheckCircle size={16} className="text-emerald-500 shrink-0" />
+      <div>
+        <p className="text-sm font-medium text-emerald-800">Plano {planName}</p>
+        <p className="text-xs text-emerald-600">Envios ilimitados</p>
+      </div>
     </div>
   );
 }

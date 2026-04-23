@@ -3,6 +3,7 @@ export interface Profile {
   email: string;
   full_name: string;
   role: 'user' | 'admin';
+  is_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -230,6 +231,8 @@ export interface Plan {
   max_templates: number;
   max_automation_rules: number;
   max_ai_tokens_per_month: number;
+  max_sends: number;
+  trial_duration_days: number;
   features: Record<string, boolean>;
   is_active: boolean;
   sort_order: number;
@@ -245,6 +248,7 @@ export interface ClientSubscription {
   started_at: string;
   expires_at: string | null;
   cancelled_at: string | null;
+  send_count: number;
   notes: string;
   created_at: string;
   updated_at: string;

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, CreditCard, LogOut, ShieldCheck, X } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, LogOut, ShieldCheck, X, Link2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../lib/AuthContext';
 
@@ -7,6 +7,7 @@ const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Visão Geral', end: true },
   { to: '/admin/plans', icon: CreditCard, label: 'Planos' },
   { to: '/admin/clients', icon: Users, label: 'Clientes' },
+  { to: '/admin/checkout', icon: Link2, label: 'Checkout' },
 ];
 
 export function AdminSidebar({ onClose }: { onClose?: () => void }) {

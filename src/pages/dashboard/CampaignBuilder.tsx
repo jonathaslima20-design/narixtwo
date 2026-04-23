@@ -31,6 +31,8 @@ import { Button } from '../../components/ui/Button';
 import { leadDisplayName } from '../../lib/leadDisplay';
 import { useAudioRecorder, formatDuration } from '../../lib/useAudioRecorder';
 import { AudioPlayer } from '../../components/chat/AudioPlayer';
+import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
+import { PricingModal } from '../../components/ui/PricingModal';
 
 const STEPS = ['Mensagem', 'Destinatários', 'Agendamento', 'Revisão'];
 
@@ -102,6 +104,7 @@ export function CampaignBuilder() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { categories } = useLeadCategories();
+  const { isBlocked } = useSubscriptionCtx();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<CampaignForm>(INITIAL_FORM);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -109,6 +112,7 @@ export function CampaignBuilder() {
   const [leadsLoading, setLeadsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [leadSearch, setLeadSearch] = useState('');
+  const [showPaywall, setShowPaywall] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recorder = useAudioRecorder();
   const isRecording = recorder.state === 'recording' || recorder.state === 'requesting';
@@ -238,6 +242,7 @@ export function CampaignBuilder() {
   }
 
   async function handleSubmit() {
+    if (isBlocked) { setShowPaywall(true); return; }
     if (!user || submitting) return;
     setSubmitting(true);
 
@@ -1168,6 +1173,7 @@ export function CampaignBuilder() {
           </div>
         </div>
       </div>
+      <PricingModal open={showPaywall} onClose={() => setShowPaywall(false)} />
     </div>
   );
 }

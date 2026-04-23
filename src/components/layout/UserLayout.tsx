@@ -1,17 +1,32 @@
 import { useState } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { Menu, ShieldOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UserSidebar } from './UserSidebar';
 import { useAuth } from '../../lib/AuthContext';
+import { SubscriptionProvider, useSubscriptionCtx } from '../../lib/SubscriptionContext';
+import { PricingModal } from '../ui/PricingModal';
 
 export function UserLayout() {
   const { user, profile, loading } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/" replace />;
   if (profile?.role === 'admin') return <Navigate to="/admin" replace />;
+
+  return (
+    <SubscriptionProvider>
+      <UserLayoutInner />
+    </SubscriptionProvider>
+  );
+}
+
+function UserLayoutInner() {
+  const { profile } = useAuth();
+  const { isBlocked, loading: subLoading } = useSubscriptionCtx();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const accountDisabled = profile?.is_enabled === false;
 
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans">
@@ -59,6 +74,26 @@ export function UserLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Account disabled overlay */}
+      {accountDisabled && (
+        <div className="fixed inset-0 z-[60] bg-white/95 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="text-center max-w-sm">
+            <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <ShieldOff size={24} className="text-red-500" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Conta desativada</h2>
+            <p className="text-sm text-gray-500">
+              Sua conta foi desativada pelo administrador. Entre em contato com o suporte para mais informacoes.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Paywall modal */}
+      {!subLoading && isBlocked && !accountDisabled && (
+        <PricingModal open permanent />
+      )}
     </div>
   );
 }
