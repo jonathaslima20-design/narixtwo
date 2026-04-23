@@ -23,7 +23,7 @@ export function UserLayout() {
 
 function UserLayoutInner() {
   const { profile } = useAuth();
-  const { isBlocked, loading: subLoading } = useSubscriptionCtx();
+  const { isBlocked, loading: subLoading, isTrial, daysLeft, sendCount, plan } = useSubscriptionCtx();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const accountDisabled = profile?.is_enabled === false;
@@ -92,7 +92,20 @@ function UserLayoutInner() {
 
       {/* Paywall modal */}
       {!subLoading && isBlocked && !accountDisabled && (
-        <PricingModal open permanent />
+        <PricingModal
+          open
+          permanent
+          reason={
+            (() => {
+              const maxSends = plan?.max_sends ?? -1;
+              const sendsExhausted = maxSends !== -1 && sendCount >= maxSends;
+              const timeExpired = daysLeft <= 0;
+              if (sendsExhausted && timeExpired) return 'both_expired' as const;
+              if (sendsExhausted) return 'sends_exhausted' as const;
+              return 'time_expired' as const;
+            })()
+          }
+        />
       )}
     </div>
   );

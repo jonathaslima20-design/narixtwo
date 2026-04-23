@@ -37,6 +37,19 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
     // SubscriptionProvider may not be mounted yet
   }
 
+  const maxSends = plan?.max_sends ?? -1;
+  const sendsExhausted = maxSends !== -1 && sendCount >= maxSends;
+  const timeExpired = daysLeft <= 0;
+  const pricingReason = isBlocked
+    ? sendsExhausted && timeExpired
+      ? 'both_expired' as const
+      : sendsExhausted
+        ? 'sends_exhausted' as const
+        : timeExpired
+          ? 'time_expired' as const
+          : 'time_expired' as const
+    : 'browse' as const;
+
   async function handleSignOut() {
     await signOut();
     navigate('/');
@@ -105,7 +118,7 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
         />
       </div>
 
-      <PricingModal open={showPricing} onClose={() => setShowPricing(false)} />
+      <PricingModal open={showPricing} onClose={() => setShowPricing(false)} reason={pricingReason} />
 
       <div className="px-3 py-4 border-t border-gray-100">
         <div className="px-3 py-2 mb-1">

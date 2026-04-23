@@ -3,10 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Crown, Zap, Clock, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
+type PricingReason = 'time_expired' | 'sends_exhausted' | 'both_expired' | 'browse';
+
 interface PricingModalProps {
   open: boolean;
   onClose?: () => void;
   permanent?: boolean;
+  reason?: PricingReason;
 }
 
 const FEATURES = [
@@ -17,7 +20,14 @@ const FEATURES = [
   'Categorias personalizadas',
 ];
 
-export function PricingModal({ open, onClose, permanent }: PricingModalProps) {
+const REASON_TITLES: Record<PricingReason, string> = {
+  time_expired: 'Seu periodo de teste terminou. Escolha um plano para continuar.',
+  sends_exhausted: 'Voce utilizou todos os envios de teste. Escolha um plano para continuar.',
+  both_expired: 'Seu periodo de teste terminou e os envios foram utilizados. Escolha um plano para continuar.',
+  browse: 'Conheca nossos planos e leve seu negocio para o proximo nivel.',
+};
+
+export function PricingModal({ open, onClose, permanent, reason = 'browse' }: PricingModalProps) {
   const [checkoutLinks, setCheckoutLinks] = useState({ mensal: '', anual: '' });
 
   useEffect(() => {
@@ -81,7 +91,7 @@ export function PricingModal({ open, onClose, permanent }: PricingModalProps) {
                   <Crown size={22} className="text-white" />
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
-                  Seu periodo de teste terminou. Escolha um plano para continuar.
+                  {REASON_TITLES[reason]}
                 </h2>
                 <p className="text-sm text-gray-500">
                   Desbloqueie todas as funcionalidades do BrainLead.
