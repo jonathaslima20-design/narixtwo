@@ -60,7 +60,7 @@ export function DashboardHome() {
           <p className="text-gray-500 text-sm mt-1">Aqui esta um resumo dos seus leads hoje.</p>
         </motion.div>
 
-        <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+        <motion.div variants={item} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
           {statCards.slice(0, 8).map((card) => {
             const Icon = card.iconName === 'Users' ? Users : resolveIcon(card.iconName);
             return (
