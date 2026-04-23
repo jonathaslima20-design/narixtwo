@@ -88,7 +88,7 @@ export function AuthPage() {
             {[
               { label: 'Chat Integrado', sub: 'Conecte seu WhatsApp e centralize sua coleta de leads.' },
               { label: 'Gestão de Funil', sub: 'Organize e categorize seus contatos conforme o momento da negociação.' },
-              { label: 'Envios Estratégicos', sub: 'Converta vendas com envios em massa' },
+              { label: 'Envios Estratégicos', sub: 'Realize campanhas de massa e alcance seu público com agilidade.' },
             ].map((item) => (
               <div key={item.label} className="flex items-start gap-3">
                 <div className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center mt-0.5 shrink-0">
