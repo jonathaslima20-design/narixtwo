@@ -68,7 +68,6 @@ function UserLayoutInner() {
           >
             <Menu size={20} />
           </button>
-          <span className="font-semibold text-gray-900 text-sm">BrainLead</span>
         </div>
         <main className="flex-1">
           <Outlet />
