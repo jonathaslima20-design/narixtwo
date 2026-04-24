@@ -433,7 +433,7 @@ export function CampaignBuilder() {
                     />
                     <div className="flex items-center gap-2 mt-2">
                       <span className="text-xs text-gray-400">Variáveis:</span>
-                      {['{nome}', '{telefone}'].map((v) => (
+                      {['{nome}'].map((v) => (
                         <button
                           key={v}
                           onClick={() => insertVariable(v)}
