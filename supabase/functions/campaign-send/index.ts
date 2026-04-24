@@ -440,6 +440,29 @@ Deno.serve(async (req: Request) => {
             sent_at: new Date().toISOString(),
           })
           .eq("id", recipient.id);
+
+        // Insert into messages table so the message appears in chat
+        if (recipient.lead_id) {
+          const isMedia = campaign.message_type !== "text" && campaign.message_type !== "audio";
+          const isAudio = campaign.message_type === "audio";
+          const mediaUrl = campaign.media_url || "";
+          const mediaIsUrl = mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://");
+
+          await admin.from("messages").insert({
+            user_id: user.id,
+            lead_id: recipient.lead_id,
+            direction: "out",
+            content: isMedia ? (captionContent || messageContent) : messageContent,
+            whatsapp_message_id: waId,
+            status: "sent",
+            media_url: (isMedia || isAudio) && mediaIsUrl ? mediaUrl : "",
+            media_type: isAudio ? "audio" : isMedia ? (campaign.message_type || "") : "",
+            media_mime: isMedia ? (campaign.media_type || "") : "",
+            media_caption: isMedia ? (captionContent || "") : "",
+            media_filename: isMedia ? (campaign.media_filename || "") : "",
+          });
+        }
+
         sentCount++;
         currentSendCount++;
         await admin
