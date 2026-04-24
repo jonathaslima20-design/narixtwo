@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X } from 'lucide-react';
+import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X, Clock, Send } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../lib/AuthContext';
 import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
@@ -107,20 +107,56 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
 
       <PricingModal open={showPricing} onClose={() => setShowPricing(false)} reason={pricingReason} />
 
+      {isTrial && (
+        <div className="px-3 pb-3">
+          <button
+            onClick={() => setShowPricing(true)}
+            className="w-full text-left rounded-2xl p-3.5 bg-gray-50 border border-gray-100 hover:bg-gray-100/80 transition-all duration-150 cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <Clock size={12} className="text-amber-500" />
+                <span className="text-xs font-semibold text-gray-900">Trial</span>
+              </div>
+              <span className="text-[10px] font-medium text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-100">
+                {daysLeft}d restante{daysLeft !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1">
+                <Send size={10} className="text-gray-400" />
+                <span className="text-[11px] text-gray-500">Envios</span>
+              </div>
+              <span className="text-[11px] font-medium text-gray-700">{sendCount}/{maxSends}</span>
+            </div>
+            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <motion.div
+                className={`h-full rounded-full ${
+                  maxSends > 0 && sendCount / maxSends >= 0.8
+                    ? 'bg-red-500'
+                    : maxSends > 0 && sendCount / maxSends >= 0.5
+                      ? 'bg-amber-500'
+                      : 'bg-gray-900'
+                }`}
+                initial={{ width: 0 }}
+                animate={{ width: `${maxSends > 0 ? Math.min(100, Math.round((sendCount / maxSends) * 100)) : 0}%` }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+              />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">{remainingSends} restante{remainingSends !== 1 ? 's' : ''}</p>
+          </button>
+        </div>
+      )}
+
       <div className="px-3 py-4 border-t border-gray-100">
         <div className="px-3 py-2 mb-1">
           <p className="text-xs font-medium text-gray-900 truncate">
             {profile?.full_name || profile?.email || 'Usuario'}
           </p>
           <p className="text-xs text-gray-400 truncate">{profile?.email}</p>
-          {plan?.name && (
+          {plan?.name && !isTrial && (
             <span className="inline-block mt-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
               {plan.name}
-            </span>
-          )}
-          {isTrial && !plan?.name && (
-            <span className="inline-block mt-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
-              Trial
             </span>
           )}
         </div>
