@@ -134,7 +134,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
                 <div className="border border-gray-200 rounded-2xl p-5 bg-white">
                   <div className="flex items-center gap-2 mb-3">
                     <Zap size={16} className="text-gray-900" />
-                    <span className="text-sm font-semibold text-gray-900">Mensal</span>
+                    <span className="text-sm font-semibold text-gray-900">Mensal Pro</span>
                   </div>
                   <div className="mb-4">
                     <span className="text-2xl font-bold text-gray-900">R$49</span>
@@ -146,7 +146,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
                     disabled={!checkoutLinks.mensal}
                     className="w-full py-2.5 rounded-xl text-sm font-medium bg-gray-900 text-white hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Assinar Mensal
+                    Assinar Mensal Pro
                   </button>
                   <ul className="mt-4 space-y-2">
                     {FEATURES.map((f) => (
@@ -172,7 +172,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
                   </div>
                   <div className="flex items-center gap-2 mb-3 mt-1">
                     <Crown size={16} className="text-emerald-600" />
-                    <span className="text-sm font-semibold text-gray-900">Anual</span>
+                    <span className="text-sm font-semibold text-gray-900">Anual Pro</span>
                   </div>
                   <div className="mb-1">
                     <span className="text-2xl font-bold text-gray-900">R$389</span>
@@ -184,7 +184,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
                     disabled={!checkoutLinks.anual}
                     className="w-full py-2.5 rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Assinar Anual
+                    Assinar Anual Pro
                   </button>
                   <ul className="mt-4 space-y-2">
                     {FEATURES.map((f) => (
