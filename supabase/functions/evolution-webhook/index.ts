@@ -273,6 +273,47 @@ function extFromMime(mt: string): string {
   return "ogg";
 }
 
+function extractMediaMeta(
+  msg: Record<string, unknown>,
+  mediaType: string,
+): { mimeType: string; filename: string } {
+  const m = (msg.message ?? {}) as Record<string, unknown>;
+  const node =
+    mediaType === "image" ? (m.imageMessage as Record<string, unknown> | undefined) :
+    mediaType === "video" ? (m.videoMessage as Record<string, unknown> | undefined) :
+    mediaType === "document" ? (m.documentMessage as Record<string, unknown> | undefined) :
+    mediaType === "sticker" ? (m.stickerMessage as Record<string, unknown> | undefined) :
+    undefined;
+  const rawMime = typeof node?.mimetype === "string" ? (node.mimetype as string).split(";")[0].trim() : "";
+  const filename = typeof node?.fileName === "string" ? (node.fileName as string) : "";
+  const fallbackMime =
+    mediaType === "image" ? "image/jpeg" :
+    mediaType === "video" ? "video/mp4" :
+    mediaType === "document" ? "application/octet-stream" :
+    mediaType === "sticker" ? "image/webp" :
+    "application/octet-stream";
+  return { mimeType: rawMime || fallbackMime, filename };
+}
+
+function extFromMimeOrName(mime: string, filename: string): string {
+  if (filename) {
+    const fromName = filename.split(".").pop();
+    if (fromName && fromName.length <= 6) return fromName.toLowerCase();
+  }
+  const s = mime.toLowerCase();
+  if (s.includes("jpeg") || s.includes("jpg")) return "jpg";
+  if (s.includes("png")) return "png";
+  if (s.includes("webp")) return "webp";
+  if (s.includes("gif")) return "gif";
+  if (s.includes("mp4")) return "mp4";
+  if (s.includes("quicktime") || s.includes("mov")) return "mov";
+  if (s.includes("pdf")) return "pdf";
+  if (s.includes("msword") || s.includes("officedocument.wordprocessingml")) return "docx";
+  if (s.includes("spreadsheet") || s.includes("excel")) return "xlsx";
+  if (s.includes("plain")) return "txt";
+  return "bin";
+}
+
 function mapPresence(state: unknown): "available" | "composing" | "recording" | "paused" | null {
   if (typeof state !== "string") return null;
   const s = state.toLowerCase();
@@ -669,9 +710,24 @@ Deno.serve(async (req: Request) => {
         let media_url = "";
         let audioDurationSeconds = 0;
 
-        if (media_type === "audio") {
-          const audioMeta = extractAudioMeta(msg);
-          audioDurationSeconds = audioMeta.seconds;
+        if (media_type && media_type !== "") {
+          let mimeType = "";
+          let ext = "";
+          let bucket = "";
+
+          if (media_type === "audio") {
+            const audioMeta = extractAudioMeta(msg);
+            audioDurationSeconds = audioMeta.seconds;
+            mimeType = audioMeta.mimeType;
+            ext = extFromMime(mimeType);
+            bucket = "lead-audio-messages";
+          } else {
+            const meta = extractMediaMeta(msg, media_type);
+            mimeType = meta.mimeType;
+            ext = extFromMimeOrName(meta.mimeType, meta.filename);
+            bucket = "lead-media";
+          }
+
           let b64 = extractInlineBase64(msg);
           if (!b64) {
             const { data: evoSettings } = await admin
@@ -694,23 +750,26 @@ Deno.serve(async (req: Request) => {
           if (b64) {
             try {
               const bytes = base64ToUint8Array(b64);
-              const MAX = 16 * 1024 * 1024;
+              const MAX = 30 * 1024 * 1024;
               if (bytes.length <= MAX) {
-                const ext = extFromMime(audioMeta.mimeType);
                 const dir = fromMe ? "outbound" : "inbound";
                 const path = `${userId}/${dir}/${crypto.randomUUID()}.${ext}`;
                 const { error: upErr } = await admin.storage
-                  .from("lead-audio-messages")
-                  .upload(path, bytes, { contentType: audioMeta.mimeType, upsert: false });
+                  .from(bucket)
+                  .upload(path, bytes, { contentType: mimeType, upsert: false });
                 if (!upErr) {
                   const { data: signed } = await admin.storage
-                    .from("lead-audio-messages")
+                    .from(bucket)
                     .createSignedUrl(path, 60 * 60 * 24 * 365);
                   if (signed?.signedUrl) media_url = signed.signedUrl;
+                } else {
+                  console.error("evolution-webhook: media upload failed", upErr.message, "type=", media_type);
                 }
+              } else {
+                console.warn("evolution-webhook: media too large", bytes.length, "type=", media_type);
               }
             } catch (e) {
-              console.error("evolution-webhook: audio upload failed", e);
+              console.error("evolution-webhook: media upload failed", e);
             }
           }
         }
