@@ -56,7 +56,7 @@ export function DashboardHome() {
     <div className="p-4 sm:p-6 lg:p-8">
       <motion.div variants={container} initial="hidden" animate="show" className="max-w-4xl mx-auto">
         <motion.div variants={item} className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Ola, {name}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Olá, {name}</h1>
           <p className="text-gray-500 text-sm mt-1">Aqui esta um resumo dos seus leads hoje.</p>
         </motion.div>
 
