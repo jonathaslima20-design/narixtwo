@@ -291,7 +291,8 @@ Deno.serve(async (req: Request) => {
       maxSends = planRow?.max_sends ?? -1;
     }
 
-    const delayMs = Math.max(500, campaign.delay_ms ?? 3000);
+    const delayMin = Math.max(15000, campaign.delay_ms ?? 20000);
+    const delayMax = Math.max(delayMin + 15000, campaign.delay_ms_max ?? delayMin + 20000);
     const startTime = Date.now();
     let sentCount = 0;
     let failedCount = 0;
@@ -493,7 +494,8 @@ Deno.serve(async (req: Request) => {
         })
         .eq("id", campaignId);
 
-      await new Promise((r) => setTimeout(r, delayMs));
+      const actualDelay = Math.floor(Math.random() * (delayMax - delayMin + 1)) + delayMin;
+      await new Promise((r) => setTimeout(r, actualDelay));
     }
 
     const { data: finalRecipients } = await admin

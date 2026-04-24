@@ -98,6 +98,7 @@ export function Campaigns() {
         media_filename: c.media_filename,
         caption: c.caption,
         delay_ms: c.delay_ms,
+        delay_ms_max: c.delay_ms_max,
         send_window_start: c.send_window_start,
         send_window_end: c.send_window_end,
         filter_tags: c.filter_tags,

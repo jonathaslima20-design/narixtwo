@@ -33,6 +33,7 @@ import { useAudioRecorder, formatDuration } from '../../lib/useAudioRecorder';
 import { AudioPlayer } from '../../components/chat/AudioPlayer';
 import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
 import { PricingModal } from '../../components/ui/PricingModal';
+import { RangeSlider } from '../../components/ui/RangeSlider';
 
 const STEPS = ['Mensagem', 'Destinatários', 'Agendamento', 'Revisão'];
 
@@ -55,6 +56,7 @@ interface CampaignForm {
   send_window_start: string;
   send_window_end: string;
   delay_ms: number;
+  delay_ms_max: number;
 }
 
 const INITIAL_FORM: CampaignForm = {
@@ -75,7 +77,8 @@ const INITIAL_FORM: CampaignForm = {
   scheduled_time: '09:00',
   send_window_start: '',
   send_window_end: '',
-  delay_ms: 3000,
+  delay_ms: 20000,
+  delay_ms_max: 40000,
 };
 
 function readAudioDuration(file: File): Promise<number> {
@@ -288,6 +291,7 @@ export function CampaignBuilder() {
           scheduled_at: scheduledAt,
           total_recipients: filteredLeads.length,
           delay_ms: form.delay_ms,
+          delay_ms_max: form.delay_ms_max,
           send_window_start: form.send_window_start,
           send_window_end: form.send_window_end,
           filter_tags: form.filter_tags,
@@ -972,26 +976,22 @@ export function CampaignBuilder() {
                 {/* Delay */}
                 <div className="bg-white rounded-2xl border border-gray-100 p-5">
                   <h3 className="text-sm font-semibold text-gray-900 mb-1">Intervalo entre mensagens</h3>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Intervalos maiores ajudam a evitar bloqueios pelo WhatsApp. Recomendamos pelo menos 3 segundos.
+                  <p className="text-xs text-gray-500 mb-3">
+                    O sistema aguarda um tempo aleatório entre os dois valores definidos. Intervalos maiores reduzem o risco de bloqueio pelo WhatsApp.
                   </p>
-                  <div className="flex items-center gap-4">
-                    <input
-                      type="range"
-                      min={1000}
-                      max={15000}
-                      step={500}
-                      value={form.delay_ms}
-                      onChange={(e) => updateForm({ delay_ms: Number(e.target.value) })}
-                      className="flex-1 accent-gray-900"
-                    />
-                    <span className="text-sm font-semibold text-gray-900 w-16 text-right">
-                      {(form.delay_ms / 1000).toFixed(1)}s
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[10px] text-gray-400 mt-1 px-0.5">
-                    <span>1s (rápido)</span>
-                    <span>15s (seguro)</span>
+                  <RangeSlider
+                    min={15000}
+                    max={120000}
+                    step={1000}
+                    minGap={15000}
+                    valueMin={form.delay_ms}
+                    valueMax={form.delay_ms_max}
+                    onChange={(lo, hi) => updateForm({ delay_ms: lo, delay_ms_max: hi })}
+                    formatLabel={(v) => `${Math.round(v / 1000)}s`}
+                  />
+                  <div className="flex justify-between text-[10px] text-gray-400 mt-2 px-0.5">
+                    <span>15s (mínimo)</span>
+                    <span>120s (máximo)</span>
                   </div>
                 </div>
               </div>
@@ -1058,7 +1058,7 @@ export function CampaignBuilder() {
                     )}
                     <div className="flex justify-between py-3 border-b border-gray-50">
                       <span className="text-sm text-gray-500">Intervalo</span>
-                      <span className="text-sm font-medium text-gray-900">{(form.delay_ms / 1000).toFixed(1)}s entre msgs</span>
+                      <span className="text-sm font-medium text-gray-900">entre {Math.round(form.delay_ms / 1000)}s e {Math.round(form.delay_ms_max / 1000)}s (aleatório)</span>
                     </div>
                     <div className="flex justify-between py-3">
                       <span className="text-sm text-gray-500">Tempo estimado</span>
