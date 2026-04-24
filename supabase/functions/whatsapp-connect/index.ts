@@ -117,11 +117,16 @@ Deno.serve(async (req: Request) => {
     if (!user?.id) return json(401, { error: "Invalid authentication" });
 
     let forceReset = false;
+    let targetInstanceId: string | null = null;
+    let requestedLabel = "";
     if (req.method === "POST") {
       try {
         const body = await req.json();
-        if (body && typeof body === "object" && (body as { reset?: boolean }).reset === true) {
-          forceReset = true;
+        if (body && typeof body === "object") {
+          const b = body as { reset?: boolean; instance_id?: string; label?: string };
+          if (b.reset === true) forceReset = true;
+          if (typeof b.instance_id === "string" && b.instance_id.trim()) targetInstanceId = b.instance_id.trim();
+          if (typeof b.label === "string") requestedLabel = b.label.trim().slice(0, 60);
         }
       } catch (_) {
         // no body, ignore
@@ -158,13 +163,41 @@ Deno.serve(async (req: Request) => {
       return json(400, { error: "Evolution API não configurada no painel admin" });
     }
 
-    const { data: existingInstance } = await admin
+    const { data: userInstances } = await admin
       .from("whatsapp_instances")
       .select("*")
       .eq("user_id", user.id)
-      .maybeSingle();
+      .order("created_at", { ascending: true });
 
-    const oldInstanceName = existingInstance?.instance_name as string | undefined;
+    const instances = userInstances ?? [];
+
+    let existingInstance: Record<string, unknown> | null = null;
+    if (targetInstanceId) {
+      existingInstance = instances.find((i) => i.id === targetInstanceId) ?? null;
+      if (!existingInstance) return json(404, { error: "Instância não encontrada" });
+    }
+
+    if (!existingInstance) {
+      const { data: sub } = await admin
+        .from("client_subscriptions")
+        .select("max_instances_override, plans(max_whatsapp_instances)")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const planLimitRaw = (sub?.plans as { max_whatsapp_instances?: number } | null | undefined)?.max_whatsapp_instances;
+      const overrideRaw = (sub as { max_instances_override?: number | null } | null | undefined)?.max_instances_override;
+      const override = typeof overrideRaw === "number" ? overrideRaw : null;
+      const planLimit = typeof planLimitRaw === "number" ? planLimitRaw : 1;
+      const effectiveLimit = override !== null ? override : planLimit;
+
+      if (effectiveLimit !== -1 && instances.length >= effectiveLimit) {
+        return json(403, {
+          error: `Limite de instâncias atingido (${effectiveLimit}). Fale com o administrador para aumentar.`,
+        });
+      }
+    }
+
+    const oldInstanceName = (existingInstance?.instance_name as string | undefined) ?? undefined;
     const isConnected = existingInstance?.status === "connected";
     const mustReset = forceReset || (!!existingInstance && !isConnected);
 
@@ -290,7 +323,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const nowIso = new Date().toISOString();
-    const upsertPayload: Record<string, unknown> = {
+    const payload: Record<string, unknown> = {
       user_id: user.id,
       instance_name: instanceName,
       status: "connecting",
@@ -298,13 +331,30 @@ Deno.serve(async (req: Request) => {
       qr_updated_at: nowIso,
       last_error: null,
     };
-    if (instanceApiKey) upsertPayload.evolution_api_key = instanceApiKey;
+    if (instanceApiKey) payload.evolution_api_key = instanceApiKey;
+    if (requestedLabel && !existingInstance) payload.label = requestedLabel;
 
-    const { data: saved, error: saveErr } = await admin
-      .from("whatsapp_instances")
-      .upsert(upsertPayload, { onConflict: "user_id" })
-      .select()
-      .maybeSingle();
+    let saved: Record<string, unknown> | null = null;
+    let saveErr: { message: string } | null = null;
+
+    if (existingInstance) {
+      const res = await admin
+        .from("whatsapp_instances")
+        .update(payload)
+        .eq("id", existingInstance.id as string)
+        .select()
+        .maybeSingle();
+      saved = res.data;
+      saveErr = res.error;
+    } else {
+      const res = await admin
+        .from("whatsapp_instances")
+        .insert(payload)
+        .select()
+        .maybeSingle();
+      saved = res.data;
+      saveErr = res.error;
+    }
 
     if (saveErr) return json(500, { error: "Falha ao salvar instância" });
 

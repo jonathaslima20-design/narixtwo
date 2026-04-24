@@ -31,6 +31,7 @@ interface ClientRow extends Profile {
   instance_status?: string;
   instance_phone?: string;
   instance_send_mode?: string;
+  instance_count: number;
   lead_count: number;
   campaign_count: number;
   template_count: number;
@@ -39,6 +40,8 @@ interface ClientRow extends Profile {
   plan_name?: string;
   plan_slug?: string;
   plan_max_sends?: number;
+  plan_max_instances?: number;
+  max_instances_override?: number | null;
   sub_status?: SubscriptionStatus;
   sub_started_at?: string;
   sub_expires_at?: string | null;
@@ -97,8 +100,9 @@ export function ClientManagement() {
 
     const enriched = await Promise.all(
       profiles.map(async (p) => {
-        const [instRes, leadRes, campaignRes, templateRes, subRes] = await Promise.all([
-          supabase.from('whatsapp_instances').select('status, phone_number, send_mode').eq('user_id', p.id).maybeSingle(),
+        const [instRes, instCountRes, leadRes, campaignRes, templateRes, subRes] = await Promise.all([
+          supabase.from('whatsapp_instances').select('status, phone_number, send_mode').eq('user_id', p.id).order('created_at', { ascending: true }).limit(1).maybeSingle(),
+          supabase.from('whatsapp_instances').select('id', { count: 'exact', head: true }).eq('user_id', p.id),
           supabase.from('leads').select('id', { count: 'exact' }).eq('user_id', p.id),
           supabase.from('campaigns').select('id', { count: 'exact' }).eq('user_id', p.id),
           supabase.from('message_templates').select('id', { count: 'exact' }).eq('user_id', p.id),
@@ -113,6 +117,7 @@ export function ClientManagement() {
           instance_status: instRes.data?.status || 'disconnected',
           instance_phone: instRes.data?.phone_number || '',
           instance_send_mode: instRes.data?.send_mode || 'manual',
+          instance_count: instCountRes.count || 0,
           lead_count: leadRes.count || 0,
           campaign_count: campaignRes.count || 0,
           template_count: templateRes.count || 0,
@@ -121,6 +126,8 @@ export function ClientManagement() {
           plan_name: plan?.name || 'Sem plano',
           plan_slug: plan?.slug,
           plan_max_sends: plan?.max_sends ?? -1,
+          plan_max_instances: plan?.max_whatsapp_instances ?? 1,
+          max_instances_override: (sub as { max_instances_override?: number | null } | null | undefined)?.max_instances_override ?? null,
           sub_status: sub?.status as SubscriptionStatus | undefined,
           sub_started_at: sub?.started_at,
           sub_expires_at: sub?.expires_at,
@@ -795,11 +802,19 @@ function ClientDetailModal({
                   {usageBar(client.template_count, currentPlan?.max_templates ?? -1)}
                 </div>
                 <div className="bg-gray-50 rounded-xl p-3">
-                  <p className="text-xs text-gray-500 mb-1.5">WhatsApp</p>
-                  {usageBar(client.instance_status === 'connected' ? 1 : 0, currentPlan?.max_whatsapp_instances ?? 1)}
+                  <p className="text-xs text-gray-500 mb-1.5">Instâncias WhatsApp</p>
+                  {usageBar(
+                    client.instance_count,
+                    client.max_instances_override !== null && client.max_instances_override !== undefined
+                      ? client.max_instances_override
+                      : currentPlan?.max_whatsapp_instances ?? 1,
+                  )}
                 </div>
               </div>
             </section>
+
+            {/* Instance limit */}
+            <InstanceLimitSection client={client} onUpdated={onUpdated} />
 
             {/* WhatsApp section */}
             <section>
@@ -808,13 +823,16 @@ function ClientDetailModal({
                 WhatsApp
               </h3>
               <div className="bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                   <Badge variant={waInfo.variant}>{waInfo.label}</Badge>
                   {client.instance_phone && (
                     <span className="text-sm text-gray-700">{client.instance_phone}</span>
                   )}
                   <span className="text-xs text-gray-400 capitalize">
                     Modo: {client.instance_send_mode || 'manual'}
+                  </span>
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {client.instance_count} {client.instance_count === 1 ? 'instância' : 'instâncias'}
                   </span>
                 </div>
               </div>
@@ -852,5 +870,95 @@ function ClientDetailModal({
         </motion.div>
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+function InstanceLimitSection({
+  client,
+  onUpdated,
+}: {
+  client: ClientRow;
+  onUpdated: (c: ClientRow) => void;
+}) {
+  const hasOverride = client.max_instances_override !== null && client.max_instances_override !== undefined;
+  const [useOverride, setUseOverride] = useState(hasOverride);
+  const [value, setValue] = useState(
+    hasOverride ? String(client.max_instances_override) : String(client.plan_max_instances ?? 1),
+  );
+  const [saving, setSaving] = useState(false);
+
+  const planLimit = client.plan_max_instances ?? 1;
+  const effective = hasOverride ? (client.max_instances_override as number) : planLimit;
+
+  async function save() {
+    setSaving(true);
+    try {
+      const override = useOverride ? parseInt(value, 10) : null;
+      if (useOverride && (isNaN(override as number) || (override as number) < -1)) {
+        alert('Digite um número válido (use -1 para ilimitado, 0+ para limite específico).');
+        setSaving(false);
+        return;
+      }
+      const { error } = await supabase
+        .from('client_subscriptions')
+        .update({ max_instances_override: override, updated_at: new Date().toISOString() })
+        .eq('user_id', client.id);
+      if (error) throw error;
+      onUpdated({ ...client, max_instances_override: override });
+    } catch {
+      alert('Erro ao salvar limite de instâncias.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <Smartphone size={14} className="text-gray-400" />
+        Limite de Instâncias WhatsApp
+      </h3>
+      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-gray-600">Em uso</span>
+          <span className="font-semibold text-gray-900">
+            {client.instance_count} / {effective === -1 ? 'Ilimitado' : effective}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span>Limite do plano</span>
+          <span>{planLimit === -1 ? 'Ilimitado' : planLimit}</span>
+        </div>
+        <div className="pt-3 border-t border-gray-200 space-y-2">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useOverride}
+              onChange={(e) => setUseOverride(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Sobrepor limite do plano para este cliente
+          </label>
+          {useOverride && (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={-1}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                className="w-28 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+              />
+              <span className="text-xs text-gray-500">instâncias (-1 = ilimitado)</span>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button size="sm" loading={saving} onClick={save}>
+              <Save size={12} />
+              Salvar limite
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

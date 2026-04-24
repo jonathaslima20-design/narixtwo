@@ -34,13 +34,30 @@ Deno.serve(async (req: Request) => {
     const user = (await userRes.json()) as { id?: string };
     if (!user?.id) return json(401, { error: "Invalid authentication" });
 
+    let instanceId: string | null = null;
+    if (req.method === "POST") {
+      try {
+        const body = await req.json();
+        if (body && typeof body === "object") {
+          const b = body as { instance_id?: string };
+          if (typeof b.instance_id === "string" && b.instance_id.trim()) instanceId = b.instance_id.trim();
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+
     const admin = createClient(supabaseUrl, serviceKey);
 
-    const { data: instance } = await admin
+    let instanceQuery = admin
       .from("whatsapp_instances")
       .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
+      .eq("user_id", user.id);
+    if (instanceId) instanceQuery = instanceQuery.eq("id", instanceId);
+    else instanceQuery = instanceQuery.order("created_at", { ascending: true }).limit(1);
+
+    const { data: instanceRow } = await instanceQuery.maybeSingle();
+    const instance = instanceRow;
 
     if (!instance) return json(200, { instance: null });
 
@@ -103,7 +120,7 @@ Deno.serve(async (req: Request) => {
       const { data: updated } = await admin
         .from("whatsapp_instances")
         .update(updates)
-        .eq("user_id", user.id)
+        .eq("id", instance.id)
         .select()
         .maybeSingle();
       return json(200, { instance: updated ?? instance });
