@@ -63,12 +63,22 @@ function extractEvolutionMessageId(payload: unknown): string {
 
 function interpolateMessage(
   template: string,
-  leadName: string,
+  leadName: string | null,
   phone: string,
 ): string {
-  return (template || "")
-    .replace(/\{nome\}/gi, leadName || "")
-    .replace(/\{telefone\}/gi, phone || "");
+  let result = template || "";
+  if (leadName) {
+    result = result.replace(/\{nome\}/gi, leadName);
+  } else {
+    // Remove {nome} and any extra space left around it to avoid double spaces
+    result = result.replace(/\s*\{nome\}\s*/gi, (match, offset, str) => {
+      const before = str[offset - 1];
+      const after = str[offset + match.length];
+      if (before && after && before !== " " && after !== " ") return " ";
+      return "";
+    });
+  }
+  return result.replace(/\{telefone\}/gi, phone || "");
 }
 
 function isWithinWindow(start: string, end: string): boolean {

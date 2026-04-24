@@ -304,7 +304,7 @@ export function CampaignBuilder() {
         campaign_id: campaign.id,
         lead_id: l.id,
         phone: l.phone,
-        lead_name: leadDisplayName(l) || l.phone,
+        lead_name: leadDisplayName(l) || null,
         status: 'pending',
       }));
 
