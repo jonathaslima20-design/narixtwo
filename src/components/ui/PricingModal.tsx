@@ -164,13 +164,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
 
                 {/* Anual */}
                 <div className="relative border-2 border-emerald-500 rounded-2xl p-5 bg-white shadow-lg shadow-emerald-100/50">
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-500 text-white text-xs font-semibold rounded-full">
-                      <Crown size={11} />
-                      Melhor Custo-Beneficio
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mb-3 mt-1">
+                  <div className="flex items-center gap-2 mb-3">
                     <Crown size={16} className="text-emerald-600" />
                     <span className="text-sm font-semibold text-gray-900">Anual Pro</span>
                   </div>
