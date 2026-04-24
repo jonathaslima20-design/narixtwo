@@ -669,7 +669,7 @@ Deno.serve(async (req: Request) => {
         let media_url = "";
         let audioDurationSeconds = 0;
 
-        if (media_type === "audio" && !fromMe) {
+        if (media_type === "audio") {
           const audioMeta = extractAudioMeta(msg);
           audioDurationSeconds = audioMeta.seconds;
           let b64 = extractInlineBase64(msg);
@@ -697,7 +697,8 @@ Deno.serve(async (req: Request) => {
               const MAX = 16 * 1024 * 1024;
               if (bytes.length <= MAX) {
                 const ext = extFromMime(audioMeta.mimeType);
-                const path = `${userId}/inbound/${crypto.randomUUID()}.${ext}`;
+                const dir = fromMe ? "outbound" : "inbound";
+                const path = `${userId}/${dir}/${crypto.randomUUID()}.${ext}`;
                 const { error: upErr } = await admin.storage
                   .from("lead-audio-messages")
                   .upload(path, bytes, { contentType: audioMeta.mimeType, upsert: false });
