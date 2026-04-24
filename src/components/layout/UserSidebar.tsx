@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X, Clock, Send } from 'lucide-react';
+import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X, Clock, Send, HelpCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../lib/AuthContext';
 import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/dashboard/crm', icon: Users, label: 'Gestao de Leads', end: false, alwaysEnabled: false },
   { to: '/dashboard/campaigns', icon: Megaphone, label: 'Campanhas', end: false, alwaysEnabled: false },
   { to: '/dashboard/settings', icon: Settings, label: 'Configuracoes', end: false, alwaysEnabled: false },
+  { to: '/dashboard/ajuda', icon: HelpCircle, label: 'Ajuda', end: false, alwaysEnabled: true },
 ];
 
 export function UserSidebar({ onClose }: { onClose?: () => void }) {

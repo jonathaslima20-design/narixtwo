@@ -10,6 +10,7 @@ import { Settings } from './pages/dashboard/Settings';
 import { Campaigns } from './pages/dashboard/Campaigns';
 import { CampaignBuilder } from './pages/dashboard/CampaignBuilder';
 import { CampaignDetail } from './pages/dashboard/CampaignDetail';
+import { HelpCenter } from './pages/dashboard/HelpCenter';
 import { AdminOverview } from './pages/admin/AdminOverview';
 import { ClientManagement } from './pages/admin/ClientManagement';
 import { PlanManagement } from './pages/admin/PlanManagement';
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="campaigns" element={<Campaigns />} />
             <Route path="campaigns/new" element={<CampaignBuilder />} />
             <Route path="campaigns/:id" element={<CampaignDetail />} />
+            <Route path="ajuda" element={<HelpCenter />} />
           </Route>
 
           <Route path="/admin" element={<AdminLayout />}>
