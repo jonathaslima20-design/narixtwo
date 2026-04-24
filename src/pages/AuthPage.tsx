@@ -69,7 +69,14 @@ export function AuthPage() {
   return (
     <div className="min-h-screen bg-white flex">
       <div className="hidden lg:flex flex-1 bg-gray-950 items-center justify-center p-12 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_rgba(255,255,255,0.05)_0%,_transparent_60%)]" />
+        {/* Decorative background elements */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_rgba(255,255,255,0.06)_0%,_transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_rgba(255,255,255,0.04)_0%,_transparent_50%)]" />
+        <div className="absolute top-20 left-16 w-72 h-72 rounded-full bg-white/[0.02] blur-3xl" />
+        <div className="absolute bottom-20 right-16 w-56 h-56 rounded-full bg-white/[0.02] blur-3xl" />
+        {/* Subtle grid */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -77,13 +84,13 @@ export function AuthPage() {
           className="relative max-w-sm"
         >
           <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center ring-1 ring-white/10">
               <Brain size={20} className="text-white" />
             </div>
             <span className="text-2xl font-bold text-white tracking-tight">BrainLead</span>
           </div>
-          <h2 className="text-3xl font-bold text-white mb-4 leading-tight">
-            O Sistema que transforma Leads em vendas.
+          <h2 className="text-4xl font-bold text-white mb-4 leading-[1.15] tracking-tight">
+            Transforme leads em vendas reais.
           </h2>
           <p className="text-gray-400 text-base leading-relaxed">
             Organize seus contatos, gerencie conversas e dispare ofertas de forma simples e eficiente.
@@ -92,24 +99,30 @@ export function AuthPage() {
           <div className="mt-10 space-y-4">
             {[
               { label: 'Chat Integrado', sub: 'Conecte seu WhatsApp e centralize sua coleta de leads.' },
-              { label: 'Gestão de Funil', sub: 'Organize e categorize seus contatos conforme o momento da negociação.' },
-              { label: 'Envios Estratégicos', sub: 'Realize campanhas de massa e alcance seu público com agilidade.' },
-            ].map((item) => (
-              <div key={item.label} className="flex items-start gap-3">
-                <div className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center mt-0.5 shrink-0">
+              { label: 'Gestao de Funil', sub: 'Organize e categorize seus contatos conforme o momento da negociacao.' },
+              { label: 'Envios Estrategicos', sub: 'Realize campanhas de massa e alcance seu publico com agilidade.' },
+            ].map((feat, i) => (
+              <motion.div
+                key={feat.label}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 + i * 0.1, duration: 0.4 }}
+                className="flex items-start gap-3"
+              >
+                <div className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center mt-0.5 shrink-0 ring-1 ring-white/10">
                   <div className="w-1.5 h-1.5 bg-white rounded-full" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-white">{item.label}</p>
-                  <p className="text-xs text-gray-500">{item.sub}</p>
+                  <p className="text-sm font-semibold text-white">{feat.label}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{feat.sub}</p>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </motion.div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-white to-gray-50/80">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

@@ -30,7 +30,7 @@ function UserLayoutInner() {
   const accountDisabled = profile?.is_enabled === false;
 
   return (
-    <div className="flex min-h-screen bg-gray-50 font-sans">
+    <div className="flex min-h-screen bg-gray-50/80 font-sans">
       {/* Desktop sidebar */}
       <div className="hidden lg:block sticky top-0 h-screen">
         <UserSidebar />
@@ -62,10 +62,10 @@ function UserLayoutInner() {
 
       <div className="flex-1 flex flex-col overflow-auto">
         {/* Mobile header */}
-        <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center gap-3 lg:hidden">
+        <div className="sticky top-0 z-30 bg-gray-950/95 backdrop-blur-md border-b border-white/[0.07] px-4 py-3 flex items-center gap-3 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 -ml-1 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors"
+            className="p-2 -ml-1 rounded-xl text-gray-300 hover:bg-white/10 transition-colors"
           >
             <Menu size={20} />
           </button>
@@ -74,10 +74,10 @@ function UserLayoutInner() {
           <Outlet />
         </main>
         <div className="py-6 flex items-center justify-center gap-2 lg:hidden">
-          <div className="w-8 h-8 bg-gray-900 rounded-xl flex items-center justify-center">
+          <div className="w-8 h-8 bg-gray-800 rounded-xl flex items-center justify-center">
             <Brain size={16} className="text-white" />
           </div>
-          <span className="font-semibold text-gray-900">BrainLead</span>
+          <span className="font-semibold text-gray-700">BrainLead</span>
         </div>
       </div>
 
