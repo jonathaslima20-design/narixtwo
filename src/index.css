@@ -7,6 +7,15 @@
   50% { transform: scaleY(1); }
 }
 
+@keyframes brain-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.12); opacity: 0.75; }
+}
+
+.animate-brain-pulse {
+  animation: brain-pulse 1.8s ease-in-out infinite;
+}
+
 @layer base {
   * {
     box-sizing: border-box;

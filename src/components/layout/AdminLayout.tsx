@@ -4,6 +4,7 @@ import { Menu, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AdminSidebar } from './AdminSidebar';
 import { useAuth } from '../../lib/AuthContext';
+import { BrainLoader } from '../ui/BrainLoader';
 
 export function AdminLayout() {
   const { user, profile, loading } = useAuth();
@@ -66,9 +67,9 @@ export function AdminLayout() {
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+    <div className="min-h-screen bg-white flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        <BrainLoader size="lg" />
         <p className="text-sm text-gray-400">Carregando...</p>
       </div>
     </div>

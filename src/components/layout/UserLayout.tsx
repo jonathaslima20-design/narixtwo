@@ -6,6 +6,7 @@ import { UserSidebar } from './UserSidebar';
 import { useAuth } from '../../lib/AuthContext';
 import { SubscriptionProvider, useSubscriptionCtx } from '../../lib/SubscriptionContext';
 import { PricingModal } from '../ui/PricingModal';
+import { BrainLoader } from '../ui/BrainLoader';
 
 export function UserLayout() {
   const { user, profile, loading } = useAuth();
@@ -120,7 +121,7 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+        <BrainLoader size="lg" />
         <p className="text-sm text-gray-400">Carregando...</p>
       </div>
     </div>

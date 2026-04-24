@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { BrainLoader } from '../components/ui/BrainLoader';
 
 export function AuthPage() {
   const { user, profile, loading } = useAuth();
@@ -15,7 +16,11 @@ export function AuthPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (loading) return null;
+  if (loading) return (
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <BrainLoader size="lg" />
+    </div>
+  );
   if (user) {
     if (profile?.role === 'admin') return <Navigate to="/admin" replace />;
     return <Navigate to="/dashboard" replace />;
