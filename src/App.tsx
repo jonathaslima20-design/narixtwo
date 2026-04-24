@@ -15,6 +15,7 @@ import { AdminOverview } from './pages/admin/AdminOverview';
 import { ClientManagement } from './pages/admin/ClientManagement';
 import { PlanManagement } from './pages/admin/PlanManagement';
 import { CheckoutSettings } from './pages/admin/CheckoutSettings';
+import { AuditLogs } from './pages/admin/AuditLogs';
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="plans" element={<PlanManagement />} />
             <Route path="clients" element={<ClientManagement />} />
             <Route path="checkout" element={<CheckoutSettings />} />
+            <Route path="audit" element={<AuditLogs />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

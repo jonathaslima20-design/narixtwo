@@ -17,6 +17,9 @@ import {
   Send,
   Power,
   RotateCcw,
+  Download,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/Card';
@@ -26,6 +29,7 @@ import { Button } from '../../components/ui/Button';
 import { Plan, Profile, SubscriptionStatus } from '../../lib/types';
 import { useClientSubscriptions } from '../../lib/useClientSubscriptions';
 import { usePlans } from '../../lib/usePlans';
+import { logAdminAction } from '../../lib/adminAudit';
 
 interface ClientRow extends Profile {
   instance_status?: string;
@@ -83,10 +87,89 @@ export function ClientManagement() {
   const [filterSubStatus, setFilterSubStatus] = useState('all');
   const [filterWaStatus, setFilterWaStatus] = useState('all');
   const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   useEffect(() => {
     loadClients();
   }, []);
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function bulkAction(action: 'suspend' | 'reactivate') {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Confirmar ${action === 'suspend' ? 'suspensão' : 'reativação'} de ${selectedIds.size} cliente(s)?`)) return;
+    setBulkLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const newStatus: SubscriptionStatus = action === 'suspend' ? 'suspended' : 'active';
+      await supabase
+        .from('client_subscriptions')
+        .update({
+          status: newStatus,
+          cancelled_at: action === 'reactivate' ? null : undefined,
+          updated_at: new Date().toISOString(),
+        })
+        .in('user_id', ids);
+
+      const affected = clients.filter((c) => ids.includes(c.id));
+      await logAdminAction({
+        action: action === 'suspend' ? 'client.bulk_suspend' : 'client.bulk_reactivate',
+        description: `${action === 'suspend' ? 'Suspensão' : 'Reativação'} em lote de ${ids.length} clientes`,
+        metadata: { count: ids.length, emails: affected.map((c) => c.email) },
+      });
+
+      clearSelection();
+      await loadClients();
+    } catch {
+      alert('Erro ao aplicar ação em lote.');
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  function exportSelectedCsv() {
+    const rows = selectedIds.size > 0
+      ? clients.filter((c) => selectedIds.has(c.id))
+      : filtered;
+    const header = ['Nome', 'Email', 'Plano', 'Status', 'Envios', 'Leads', 'WhatsApp', 'Cadastrado em'];
+    const lines = rows.map((c) => [
+      c.full_name || '',
+      c.email,
+      c.plan_name || '',
+      c.sub_status || '',
+      String(c.send_count),
+      String(c.lead_count),
+      c.instance_status || '',
+      c.created_at,
+    ]);
+    const csv = [header, ...lines]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clientes-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    logAdminAction({
+      action: 'client.export_csv',
+      description: `Exportou ${rows.length} clientes em CSV`,
+      metadata: { count: rows.length },
+    });
+  }
 
   async function loadClients() {
     setLoading(true);
@@ -240,7 +323,46 @@ export function ClientManagement() {
                 { value: 'disconnected', label: 'Desconectado' },
               ]}
             />
+            <button
+              onClick={exportSelectedCsv}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              <Download size={14} />
+              Exportar CSV
+            </button>
           </div>
+
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 mb-4 px-4 py-3 rounded-2xl bg-gray-900 text-white">
+              <span className="text-sm font-medium">
+                {selectedIds.size} {selectedIds.size === 1 ? 'selecionado' : 'selecionados'}
+              </span>
+              <div className="h-4 w-px bg-white/20" />
+              <button
+                onClick={() => bulkAction('suspend')}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-100 hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+              >
+                <Ban size={12} />
+                Suspender
+              </button>
+              <button
+                onClick={() => bulkAction('reactivate')}
+                disabled={bulkLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={12} />
+                Reativar
+              </button>
+              <button
+                onClick={clearSelection}
+                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X size={12} />
+                Limpar
+              </button>
+            </div>
+          )}
 
           {loading ? (
             <div className="space-y-3">
@@ -259,6 +381,8 @@ export function ClientManagement() {
                 <ClientCard
                   key={client.id}
                   client={client}
+                  selected={selectedIds.has(client.id)}
+                  onToggleSelect={() => toggleSelect(client.id)}
                   onClick={() => setSelectedClient(client)}
                 />
               ))}
@@ -306,7 +430,17 @@ function FilterSelect({
   );
 }
 
-function ClientCard({ client, onClick }: { client: ClientRow; onClick: () => void }) {
+function ClientCard({
+  client,
+  selected,
+  onToggleSelect,
+  onClick,
+}: {
+  client: ClientRow;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onClick: () => void;
+}) {
   const waInfo = WA_STATUS_MAP[client.instance_status || 'disconnected'] || WA_STATUS_MAP.disconnected;
   const subInfo = SUB_STATUS_MAP[client.sub_status || 'active'] || SUB_STATUS_MAP.active;
   const planBadgeColor = client.plan_slug === 'anual'
@@ -320,8 +454,15 @@ function ClientCard({ client, onClick }: { client: ClientRow; onClick: () => voi
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={onClick}
-      className={`bg-white border rounded-2xl px-5 py-4 flex items-center gap-4 cursor-pointer hover:shadow-sm transition-shadow ${client.is_enabled === false ? 'border-red-200 opacity-60' : 'border-gray-100'}`}
+      className={`bg-white border rounded-2xl px-5 py-4 flex items-center gap-4 cursor-pointer hover:shadow-sm transition-shadow ${client.is_enabled === false ? 'border-red-200 opacity-60' : selected ? 'border-gray-900' : 'border-gray-100'}`}
     >
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
+        className="shrink-0 text-gray-400 hover:text-gray-900 transition-colors"
+        aria-label={selected ? 'Desmarcar' : 'Selecionar'}
+      >
+        {selected ? <CheckSquare size={18} className="text-gray-900" /> : <Square size={18} />}
+      </button>
       <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-sm font-bold text-gray-600 shrink-0">
         {(client.full_name || client.email).charAt(0).toUpperCase()}
       </div>
@@ -413,6 +554,13 @@ function ClientDetailModal({
     try {
       await updateSubscriptionPlan(client.id, selectedPlanId);
       const newPlan = plans.find((p) => p.id === selectedPlanId);
+      await logAdminAction({
+        action: 'client.plan_change',
+        description: `Plano alterado de "${client.plan_name}" para "${newPlan?.name || 'Sem plano'}"`,
+        targetUserId: client.id,
+        targetLabel: client.email,
+        metadata: { from: client.plan_name, to: newPlan?.name },
+      });
       onUpdated({
         ...client,
         plan_id: selectedPlanId,
@@ -444,6 +592,12 @@ function ClientDetailModal({
         await suspendSubscription(client.id);
         onUpdated({ ...client, sub_status: 'suspended' });
       }
+      await logAdminAction({
+        action: action === 'cancel' ? 'client.cancel' : action === 'reactivate' ? 'client.reactivate' : 'client.suspend',
+        description: `${action === 'cancel' ? 'Cancelou' : action === 'reactivate' ? 'Reativou' : 'Suspendeu'} a assinatura de ${client.email}`,
+        targetUserId: client.id,
+        targetLabel: client.email,
+      });
     } catch {
       alert('Erro ao atualizar status.');
     } finally {
@@ -486,6 +640,12 @@ function ClientDetailModal({
         .update({ is_enabled: newVal, updated_at: new Date().toISOString() })
         .eq('id', client.id);
       if (error) throw error;
+      await logAdminAction({
+        action: newVal ? 'client.enable' : 'client.disable',
+        description: `${newVal ? 'Ativou' : 'Desativou'} a conta de ${client.email}`,
+        targetUserId: client.id,
+        targetLabel: client.email,
+      });
       onUpdated({ ...client, is_enabled: newVal });
     } catch {
       alert('Erro ao alterar status da conta.');

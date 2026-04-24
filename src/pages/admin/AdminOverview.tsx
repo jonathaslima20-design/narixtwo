@@ -1,6 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Smartphone, TrendingUp, Activity, CreditCard, DollarSign } from 'lucide-react';
+import {
+  Users,
+  Smartphone,
+  TrendingUp,
+  Activity,
+  CreditCard,
+  DollarSign,
+  ChevronDown,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  AlertTriangle,
+  CheckCircle2,
+  WifiOff,
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/Card';
 import { Plan } from '../../lib/types';
@@ -9,6 +23,12 @@ interface Stats {
   totalUsers: number;
   activeInstances: number;
   totalLeads: number;
+  newUsers: number;
+  prevNewUsers: number;
+  newLeads: number;
+  prevNewLeads: number;
+  prevActiveInstances: number;
+  prevTotalUsers: number;
 }
 
 interface PlanDist {
@@ -19,40 +39,108 @@ interface PlanDist {
   count: number;
 }
 
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } },
-};
-const item = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 280, damping: 26 } },
-};
+interface HealthStat {
+  connected: number;
+  disconnected: number;
+  failedSends: number;
+  totalInstances: number;
+}
+
+const PERIOD_OPTIONS = [
+  { value: '7d', label: '7 dias', days: 7 },
+  { value: '30d', label: '30 dias', days: 30 },
+  { value: '90d', label: '90 dias', days: 90 },
+];
 
 function formatBRL(cents: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 }
 
+function pctChange(now: number, prev: number): { label: string; direction: 'up' | 'down' | 'flat' } {
+  if (prev === 0 && now === 0) return { label: '0%', direction: 'flat' };
+  if (prev === 0) return { label: '+100%', direction: 'up' };
+  const diff = ((now - prev) / prev) * 100;
+  if (Math.abs(diff) < 0.5) return { label: '0%', direction: 'flat' };
+  return {
+    label: `${diff > 0 ? '+' : ''}${diff.toFixed(0)}%`,
+    direction: diff > 0 ? 'up' : 'down',
+  };
+}
+
 export function AdminOverview() {
-  const [stats, setStats] = useState<Stats>({ totalUsers: 0, activeInstances: 0, totalLeads: 0 });
+  const [period, setPeriod] = useState('30d');
+  const [stats, setStats] = useState<Stats>({
+    totalUsers: 0,
+    activeInstances: 0,
+    totalLeads: 0,
+    newUsers: 0,
+    prevNewUsers: 0,
+    newLeads: 0,
+    prevNewLeads: 0,
+    prevActiveInstances: 0,
+    prevTotalUsers: 0,
+  });
   const [planDist, setPlanDist] = useState<PlanDist[]>([]);
   const [recentLogs, setRecentLogs] = useState<{ id: string; email: string; tokens_in: number; tokens_out: number; created_at: string }[]>([]);
+  const [health, setHealth] = useState<HealthStat>({ connected: 0, disconnected: 0, failedSends: 0, totalInstances: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const [usersRes, instancesRes, leadsRes, logsRes, plansRes, subsRes] = await Promise.all([
-        supabase.from('profiles').select('id', { count: 'exact' }).eq('role', 'user'),
-        supabase.from('whatsapp_instances').select('id', { count: 'exact' }).eq('status', 'connected'),
-        supabase.from('leads').select('id', { count: 'exact' }),
+      setLoading(true);
+      const days = PERIOD_OPTIONS.find((p) => p.value === period)?.days || 30;
+      const now = new Date();
+      const currentStart = new Date(now.getTime() - days * 24 * 3600 * 1000).toISOString();
+      const previousStart = new Date(now.getTime() - 2 * days * 24 * 3600 * 1000).toISOString();
+
+      const [
+        usersRes,
+        instancesAllRes,
+        instancesConnectedRes,
+        leadsRes,
+        logsRes,
+        plansRes,
+        subsRes,
+        newUsersRes,
+        prevNewUsersRes,
+        newLeadsRes,
+        prevNewLeadsRes,
+        failedSendsRes,
+      ] = await Promise.all([
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'user'),
+        supabase.from('whatsapp_instances').select('status', { count: 'exact' }),
+        supabase.from('whatsapp_instances').select('id', { count: 'exact', head: true }).eq('status', 'connected'),
+        supabase.from('leads').select('id', { count: 'exact', head: true }),
         supabase.from('usage_logs').select('tokens_in, tokens_out, created_at, user_id, profiles(email)').order('created_at', { ascending: false }).limit(10),
         supabase.from('plans').select('*').order('sort_order'),
         supabase.from('client_subscriptions').select('plan_id, status').eq('status', 'active'),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'user').gte('created_at', currentStart),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'user').gte('created_at', previousStart).lt('created_at', currentStart),
+        supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', currentStart),
+        supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', previousStart).lt('created_at', currentStart),
+        supabase.from('whatsapp_send_logs').select('id', { count: 'exact', head: true }).not('error_message', 'is', null).gte('created_at', currentStart),
       ]);
+
+      const totalInstances = instancesAllRes.count || 0;
+      const connected = instancesConnectedRes.count || 0;
 
       setStats({
         totalUsers: usersRes.count || 0,
-        activeInstances: instancesRes.count || 0,
+        activeInstances: connected,
         totalLeads: leadsRes.count || 0,
+        newUsers: newUsersRes.count || 0,
+        prevNewUsers: prevNewUsersRes.count || 0,
+        newLeads: newLeadsRes.count || 0,
+        prevNewLeads: prevNewLeadsRes.count || 0,
+        prevActiveInstances: connected,
+        prevTotalUsers: usersRes.count || 0,
+      });
+
+      setHealth({
+        connected,
+        disconnected: Math.max(totalInstances - connected, 0),
+        failedSends: failedSendsRes.count || 0,
+        totalInstances,
       });
 
       const planMap = new Map<string, Plan>();
@@ -88,23 +176,62 @@ export function AdminOverview() {
       setLoading(false);
     }
     load();
-  }, []);
+  }, [period]);
 
-  const totalMRR = planDist.reduce((acc, p) => {
-    const monthlyValue = p.billing_period === 'yearly'
-      ? Math.round(p.price_cents / 12)
-      : p.price_cents;
-    return acc + monthlyValue * p.count;
-  }, 0);
+  const totalMRR = useMemo(
+    () =>
+      planDist.reduce((acc, p) => {
+        const monthlyValue = p.billing_period === 'yearly'
+          ? Math.round(p.price_cents / 12)
+          : p.price_cents;
+        return acc + monthlyValue * p.count;
+      }, 0),
+    [planDist],
+  );
 
   const totalSubscribers = planDist.reduce((acc, p) => acc + p.count, 0);
   const maxPlanCount = Math.max(...planDist.map((p) => p.count), 1);
 
+  const usersDelta = pctChange(stats.newUsers, stats.prevNewUsers);
+  const leadsDelta = pctChange(stats.newLeads, stats.prevNewLeads);
+
   const statCards = [
-    { label: 'Clientes Ativos', value: stats.totalUsers, icon: Users, color: 'text-sky-500', bg: 'bg-sky-50' },
-    { label: 'WhatsApp Conectados', value: stats.activeInstances, icon: Smartphone, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { label: 'Total de Leads', value: stats.totalLeads, icon: TrendingUp, color: 'text-amber-500', bg: 'bg-amber-50' },
-    { label: 'Receita Mensal Estimada', value: formatBRL(totalMRR), icon: DollarSign, color: 'text-teal-500', bg: 'bg-teal-50' },
+    {
+      label: 'Clientes Ativos',
+      value: stats.totalUsers,
+      sub: `${stats.newUsers} novos no período`,
+      delta: usersDelta,
+      icon: Users,
+      color: 'text-sky-500',
+      bg: 'bg-sky-50',
+    },
+    {
+      label: 'WhatsApp Conectados',
+      value: stats.activeInstances,
+      sub: `${health.totalInstances} instâncias no total`,
+      delta: { label: '', direction: 'flat' as const },
+      icon: Smartphone,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-50',
+    },
+    {
+      label: 'Leads no Período',
+      value: stats.newLeads,
+      sub: `${stats.totalLeads.toLocaleString('pt-BR')} no total`,
+      delta: leadsDelta,
+      icon: TrendingUp,
+      color: 'text-amber-500',
+      bg: 'bg-amber-50',
+    },
+    {
+      label: 'MRR Estimado',
+      value: formatBRL(totalMRR),
+      sub: `${totalSubscribers} assinantes ativos`,
+      delta: { label: '', direction: 'flat' as const },
+      icon: DollarSign,
+      color: 'text-teal-500',
+      bg: 'bg-teal-50',
+    },
   ];
 
   const PLAN_COLORS: Record<string, string> = {
@@ -112,31 +239,92 @@ export function AdminOverview() {
     anual: 'bg-amber-500',
   };
 
+  const healthItems = [
+    {
+      label: 'WhatsApp Conectados',
+      value: health.connected,
+      total: health.totalInstances,
+      icon: CheckCircle2,
+      tone: 'emerald',
+    },
+    {
+      label: 'WhatsApp Desconectados',
+      value: health.disconnected,
+      total: health.totalInstances,
+      icon: WifiOff,
+      tone: health.disconnected > 0 ? 'amber' : 'emerald',
+    },
+    {
+      label: 'Envios com Falha',
+      value: health.failedSends,
+      total: 0,
+      icon: AlertTriangle,
+      tone: health.failedSends > 0 ? 'red' : 'emerald',
+    },
+  ];
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <motion.div variants={container} initial="hidden" animate="show" className="max-w-5xl mx-auto">
-        <motion.div variants={item} className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Visão Geral</h1>
-          <p className="text-sm text-gray-500 mt-1">Monitoramento global da plataforma BrainLead.</p>
-        </motion.div>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-5xl mx-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Visão Geral</h1>
+            <p className="text-sm text-gray-500 mt-1">Monitoramento global da plataforma BrainLead.</p>
+          </div>
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
 
         {/* Stat cards */}
-        <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
           {statCards.map((card) => (
             <Card key={card.label}>
-              <div className={`w-10 h-10 ${card.bg} rounded-xl flex items-center justify-center mb-3`}>
-                <card.icon size={18} className={card.color} />
+              <div className="flex items-start justify-between mb-3">
+                <div className={`w-10 h-10 ${card.bg} rounded-xl flex items-center justify-center`}>
+                  <card.icon size={18} className={card.color} />
+                </div>
+                {card.delta.label && <DeltaBadge direction={card.delta.direction} label={card.delta.label} />}
               </div>
               <p className="text-2xl font-bold text-gray-900">
                 {loading ? <span className="w-10 h-6 bg-gray-100 rounded animate-pulse inline-block" /> : card.value}
               </p>
               <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
+              {card.sub && <p className="text-xs text-gray-400 mt-1.5">{card.sub}</p>}
             </Card>
           ))}
-        </motion.div>
+        </div>
+
+        {/* Health panel */}
+        <div className="mb-8">
+          <Card>
+            <div className="flex items-center gap-2 mb-5">
+              <Activity size={16} className="text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-900">Saúde do Sistema</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {healthItems.map((h) => {
+                const toneClasses = {
+                  emerald: 'text-emerald-600 bg-emerald-50',
+                  amber: 'text-amber-600 bg-amber-50',
+                  red: 'text-red-600 bg-red-50',
+                } as const;
+                return (
+                  <div key={h.label} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${toneClasses[h.tone as keyof typeof toneClasses]}`}>
+                      <h.icon size={18} />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-gray-900">{h.value}</p>
+                      <p className="text-xs text-gray-500">{h.label}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
 
         {/* Plan distribution */}
-        <motion.div variants={item} className="mb-8">
+        <div className="mb-8">
           <Card>
             <div className="flex items-center gap-2 mb-5">
               <CreditCard size={16} className="text-gray-400" />
@@ -162,6 +350,7 @@ export function AdminOverview() {
                   const monthlyEquiv = p.billing_period === 'yearly'
                     ? formatBRL(Math.round(p.price_cents / 12))
                     : formatBRL(p.price_cents);
+                  const planMRR = (p.billing_period === 'yearly' ? Math.round(p.price_cents / 12) : p.price_cents) * p.count;
 
                   return (
                     <div key={p.plan_slug}>
@@ -179,6 +368,9 @@ export function AdminOverview() {
                           <span className="text-xs font-medium text-gray-700">
                             {monthlyEquiv}/mês equiv.
                           </span>
+                          <span className="text-xs font-semibold text-emerald-600">
+                            {formatBRL(planMRR)}
+                          </span>
                         </div>
                       </div>
                       <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
@@ -195,10 +387,10 @@ export function AdminOverview() {
               </div>
             )}
           </Card>
-        </motion.div>
+        </div>
 
         {/* Recent AI activity */}
-        <motion.div variants={item}>
+        <div>
           <Card>
             <div className="flex items-center gap-2 mb-4">
               <Activity size={16} className="text-gray-400" />
@@ -245,8 +437,40 @@ export function AdminOverview() {
               </div>
             )}
           </Card>
-        </motion.div>
+        </div>
       </motion.div>
     </div>
+  );
+}
+
+function PeriodSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="appearance-none pl-3 pr-8 py-2 text-sm border border-gray-200 rounded-2xl bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300 cursor-pointer"
+      >
+        {PERIOD_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+    </div>
+  );
+}
+
+function DeltaBadge({ direction, label }: { direction: 'up' | 'down' | 'flat'; label: string }) {
+  const classes = {
+    up: 'bg-emerald-50 text-emerald-700',
+    down: 'bg-red-50 text-red-600',
+    flat: 'bg-gray-100 text-gray-500',
+  }[direction];
+  const Icon = direction === 'up' ? ArrowUpRight : direction === 'down' ? ArrowDownRight : Minus;
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium ${classes}`}>
+      <Icon size={10} />
+      {label}
+    </span>
   );
 }

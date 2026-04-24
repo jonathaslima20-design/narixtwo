@@ -14,10 +14,13 @@ import {
   FileText,
   Zap,
   Settings2,
+  Copy,
+  DollarSign,
 } from 'lucide-react';
 import { usePlans } from '../../lib/usePlans';
 import { supabase } from '../../lib/supabase';
 import { Plan } from '../../lib/types';
+import { logAdminAction } from '../../lib/adminAudit';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -165,8 +168,20 @@ export function PlanManagement() {
       };
       if (editingId) {
         await updatePlan(editingId, payload);
+        await logAdminAction({
+          action: 'plan.update',
+          description: `Atualizou o plano "${payload.name}"`,
+          targetLabel: payload.name,
+          metadata: { plan_id: editingId, price_cents: payload.price_cents },
+        });
       } else {
         await createPlan(payload);
+        await logAdminAction({
+          action: 'plan.create',
+          description: `Criou o plano "${payload.name}"`,
+          targetLabel: payload.name,
+          metadata: { price_cents: payload.price_cents, billing_period: payload.billing_period },
+        });
       }
       setModalOpen(false);
     } catch {
@@ -180,7 +195,16 @@ export function PlanManagement() {
     if (!confirmDeleteId) return;
     setDeleting(true);
     try {
+      const plan = plans.find((p) => p.id === confirmDeleteId);
       await deletePlan(confirmDeleteId);
+      if (plan) {
+        await logAdminAction({
+          action: 'plan.delete',
+          description: `Excluiu o plano "${plan.name}"`,
+          targetLabel: plan.name,
+          metadata: { plan_id: plan.id, slug: plan.slug },
+        });
+      }
       setConfirmDeleteId(null);
     } catch {
       alert('Não foi possível excluir. Verifique se não há clientes neste plano.');
@@ -188,6 +212,45 @@ export function PlanManagement() {
       setDeleting(false);
     }
   }
+
+  async function handleDuplicate(plan: Plan) {
+    try {
+      const payload = {
+        name: `${plan.name} (cópia)`,
+        slug: `${plan.slug}-copy-${Date.now().toString(36)}`,
+        description: plan.description,
+        price_cents: plan.price_cents,
+        billing_period: plan.billing_period,
+        max_leads: plan.max_leads,
+        max_campaigns_per_month: plan.max_campaigns_per_month,
+        max_recipients_per_campaign: plan.max_recipients_per_campaign,
+        max_whatsapp_instances: plan.max_whatsapp_instances,
+        max_templates: plan.max_templates,
+        max_automation_rules: plan.max_automation_rules,
+        max_ai_tokens_per_month: plan.max_ai_tokens_per_month,
+        max_sends: plan.max_sends ?? -1,
+        trial_duration_days: plan.trial_duration_days ?? 0,
+        features: plan.features || {},
+        is_active: false,
+        sort_order: plans.length + 1,
+      };
+      await createPlan(payload);
+      await logAdminAction({
+        action: 'plan.duplicate',
+        description: `Duplicou o plano "${plan.name}"`,
+        targetLabel: plan.name,
+        metadata: { source_plan_id: plan.id },
+      });
+    } catch {
+      alert('Erro ao duplicar plano.');
+    }
+  }
+
+  const totalMRR = plans.reduce((acc, p) => {
+    const count = subscriberCounts[p.id] || 0;
+    const monthly = p.billing_period === 'yearly' ? Math.round(p.price_cents / 12) : p.price_cents;
+    return acc + monthly * count;
+  }, 0);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -211,6 +274,49 @@ export function PlanManagement() {
               Novo Plano
             </Button>
           </div>
+
+          {/* Revenue summary */}
+          {!loading && plans.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+              <Card>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                    <DollarSign size={18} className="text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">{formatBRL(totalMRR)}</p>
+                    <p className="text-xs text-gray-500">MRR projetado</p>
+                  </div>
+                </div>
+              </Card>
+              <Card>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-sky-50 rounded-xl flex items-center justify-center">
+                    <Users size={18} className="text-sky-600" />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">
+                      {Object.values(subscriberCounts).reduce((a, b) => a + b, 0)}
+                    </p>
+                    <p className="text-xs text-gray-500">Assinantes ativos</p>
+                  </div>
+                </div>
+              </Card>
+              <Card>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+                    <CreditCard size={18} className="text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">
+                      {plans.filter((p) => p.is_active).length} / {plans.length}
+                    </p>
+                    <p className="text-xs text-gray-500">Planos ativos</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
 
           {/* Plan cards */}
           {loading ? (
@@ -239,8 +345,17 @@ export function PlanManagement() {
                   plan={plan}
                   subscriberCount={subscriberCounts[plan.id] || 0}
                   onEdit={() => openEdit(plan)}
-                  onToggle={() => togglePlanActive(plan.id, !plan.is_active)}
+                  onToggle={async () => {
+                    await togglePlanActive(plan.id, !plan.is_active);
+                    await logAdminAction({
+                      action: 'plan.toggle',
+                      description: `${plan.is_active ? 'Desativou' : 'Ativou'} o plano "${plan.name}"`,
+                      targetLabel: plan.name,
+                      metadata: { plan_id: plan.id, is_active: !plan.is_active },
+                    });
+                  }}
                   onDelete={() => setConfirmDeleteId(plan.id)}
+                  onDuplicate={() => handleDuplicate(plan)}
                 />
               ))}
             </div>
@@ -426,14 +541,18 @@ function PlanCard({
   onEdit,
   onToggle,
   onDelete,
+  onDuplicate,
 }: {
   plan: Plan;
   subscriberCount: number;
   onEdit: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
 }) {
   const periodLabel = plan.billing_period === 'monthly' ? '/mês' : '/ano';
+  const monthly = plan.billing_period === 'yearly' ? Math.round(plan.price_cents / 12) : plan.price_cents;
+  const planMRR = monthly * subscriberCount;
 
   return (
     <motion.div
@@ -464,6 +583,9 @@ function PlanCard({
         <span className="text-xs text-gray-600">
           {subscriberCount} {subscriberCount === 1 ? 'cliente' : 'clientes'}
         </span>
+        <span className="ml-auto text-xs font-semibold text-emerald-600">
+          {formatBRL(planMRR)}/mês
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 mb-5">
@@ -483,13 +605,20 @@ function PlanCard({
         })}
       </div>
 
-      <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
+      <div className="flex items-center gap-2 pt-4 border-t border-gray-100 flex-wrap">
         <button
           onClick={onEdit}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 transition-colors"
         >
           <Pencil size={12} />
           Editar
+        </button>
+        <button
+          onClick={onDuplicate}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 transition-colors"
+        >
+          <Copy size={12} />
+          Duplicar
         </button>
         <button
           onClick={onToggle}
