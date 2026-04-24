@@ -350,9 +350,9 @@ export function CategorySettings({ embedded = false }: { embedded?: boolean } = 
             </div>
           </Card>
 
-      <div className="mt-4 p-4 bg-blue-50 rounded-2xl">
-        <p className="text-xs text-blue-600 font-medium mb-1">Como funciona</p>
-        <p className="text-xs text-blue-500">
+      <div className="mt-4 p-4 bg-gray-50 rounded-2xl">
+        <p className="text-xs text-gray-700 font-medium mb-1">Como funciona</p>
+        <p className="text-xs text-gray-500">
           As categorias organizam seus leads no Kanban e nos detalhes de cada contato.
           A primeira categoria da lista sera usada como padrao para novos leads.
           Ao excluir uma categoria, todos os leads nela serao movidos para a que voce escolher.
