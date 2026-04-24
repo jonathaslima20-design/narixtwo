@@ -62,10 +62,10 @@ function UserLayoutInner() {
 
       <div className="flex-1 flex flex-col overflow-auto">
         {/* Mobile header */}
-        <div className="sticky top-0 z-30 bg-gray-950/95 backdrop-blur-md border-b border-white/[0.07] px-4 py-3 flex items-center gap-3 lg:hidden">
+        <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 flex items-center gap-3 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 -ml-1 rounded-xl text-white hover:bg-white/10 transition-colors"
+            className="p-2 -ml-1 rounded-xl text-gray-900 hover:bg-gray-100 transition-colors"
           >
             <Menu size={20} />
           </button>
