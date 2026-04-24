@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Crown, Zap, Clock, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -57,7 +58,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
     if (link) window.open(link, '_blank', 'noopener');
   }
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -203,6 +204,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
