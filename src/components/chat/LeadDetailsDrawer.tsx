@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Building2, Briefcase, Star, Archive, Ban, Sparkles, Clock, FileText, Tag as TagIcon, Trash2 } from 'lucide-react';
+import { X, Mail, Building2, Briefcase, Star, Archive, Ban, Clock, FileText, Tag as TagIcon, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Lead, LeadNote, LeadActivity } from '../../lib/types';
 import { leadDisplayName, leadPhoneLabel } from '../../lib/leadDisplay';
@@ -16,7 +16,7 @@ interface Props {
   onLeadDeleted: (id: string) => void;
 }
 
-type Tab = 'details' | 'notes' | 'activity' | 'ai';
+type Tab = 'details' | 'notes' | 'activity';
 
 export function LeadDetailsDrawer({ open, onClose, lead, userId, onLeadUpdated, onLeadDeleted }: Props) {
   const { categories } = useLeadCategories();
@@ -122,7 +122,6 @@ export function LeadDetailsDrawer({ open, onClose, lead, userId, onLeadUpdated, 
     { key: 'details', label: 'Detalhes', icon: Mail },
     { key: 'notes', label: 'Notas', icon: FileText },
     { key: 'activity', label: 'Atividade', icon: Clock },
-    { key: 'ai', label: 'IA', icon: Sparkles },
   ];
 
   return (
@@ -325,36 +324,6 @@ export function LeadDetailsDrawer({ open, onClose, lead, userId, onLeadUpdated, 
                 </div>
               )}
 
-              {tab === 'ai' && (
-                <div className="space-y-4">
-                  <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Sparkles size={12} className="text-emerald-600" />
-                      <p className="text-xs font-semibold text-emerald-700">Resumo</p>
-                    </div>
-                    <p className="text-sm text-gray-700">
-                      {lead.ai_summary || 'Nenhum resumo gerado ainda. A IA ira atualizar conforme novas mensagens chegarem.'}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <Stat label="Score" value={`${lead.score ?? 0}/100`} />
-                    <Stat label="Sentimento" value={lead.sentiment || 'neutro'} />
-                    <Stat label="Intencao" value={lead.intent || '--'} />
-                    <Stat label="Origem" value={lead.source || 'whatsapp'} />
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-2">Progresso de qualificacao</p>
-                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
-                        style={{ width: `${lead.score ?? 0}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </motion.aside>
         </>
@@ -375,15 +344,6 @@ function Field({ label, value, onChange, icon: Icon }: { label: string; value: s
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
       />
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-2.5 bg-gray-50 rounded-xl">
-      <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">{label}</p>
-      <p className="text-sm text-gray-800 font-semibold capitalize">{value}</p>
     </div>
   );
 }
