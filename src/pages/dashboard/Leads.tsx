@@ -378,7 +378,7 @@ export function Leads() {
             )}
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            {leads.length} contatos · modo de envio: <span className="font-medium capitalize">{sendMode === 'auto' ? 'automático' : sendMode === 'approval' ? 'com aprovação' : 'manual'}</span>
+            {leads.length} contatos
           </p>
         </div>
         <button
