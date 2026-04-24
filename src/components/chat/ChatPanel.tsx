@@ -811,9 +811,7 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-medium px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg flex items-center gap-1">
-            <Sparkles size={10} /> {modeLabel[sendMode]}
-          </span>
+
           <button
             onClick={onOpenDetails}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
