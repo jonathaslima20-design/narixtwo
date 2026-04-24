@@ -27,20 +27,10 @@ import { Plan, Profile, SubscriptionStatus } from '../../lib/types';
 import { useClientSubscriptions } from '../../lib/useClientSubscriptions';
 import { usePlans } from '../../lib/usePlans';
 
-interface ClientInstanceSummary {
-  id: string;
-  instance_name: string;
-  display_name: string;
-  status: string;
-  phone_number: string;
-  send_mode: string;
-}
-
 interface ClientRow extends Profile {
-  instances: ClientInstanceSummary[];
-  instance_count: number;
-  instance_connected_count: number;
-  instance_limit: number;
+  instance_status?: string;
+  instance_phone?: string;
+  instance_send_mode?: string;
   lead_count: number;
   campaign_count: number;
   template_count: number;
@@ -107,44 +97,22 @@ export function ClientManagement() {
 
     const enriched = await Promise.all(
       profiles.map(async (p) => {
-        const [instRes, leadRes, campaignRes, templateRes, subRes, limitRes] = await Promise.all([
-          supabase
-            .from('whatsapp_instances')
-            .select('id, instance_name, display_name, status, phone_number, send_mode')
-            .eq('user_id', p.id)
-            .order('created_at', { ascending: true }),
+        const [instRes, leadRes, campaignRes, templateRes, subRes] = await Promise.all([
+          supabase.from('whatsapp_instances').select('status, phone_number, send_mode').eq('user_id', p.id).maybeSingle(),
           supabase.from('leads').select('id', { count: 'exact' }).eq('user_id', p.id),
           supabase.from('campaigns').select('id', { count: 'exact' }).eq('user_id', p.id),
           supabase.from('message_templates').select('id', { count: 'exact' }).eq('user_id', p.id),
           supabase.from('client_subscriptions').select('*, plans(*)').eq('user_id', p.id).maybeSingle(),
-          supabase.rpc('resolve_whatsapp_instance_limit', { p_user_id: p.id }),
         ]);
 
         const sub = subRes.data;
         const plan = sub?.plans as unknown as Plan | null;
-        const rawInstances = (instRes.data ?? []) as Array<{
-          id: string;
-          instance_name: string;
-          display_name: string | null;
-          status: string;
-          phone_number: string | null;
-          send_mode: string | null;
-        }>;
-        const instances: ClientInstanceSummary[] = rawInstances.map((i) => ({
-          id: i.id,
-          instance_name: i.instance_name,
-          display_name: i.display_name ?? '',
-          status: i.status,
-          phone_number: i.phone_number ?? '',
-          send_mode: i.send_mode ?? 'manual',
-        }));
 
         return {
           ...p,
-          instances,
-          instance_count: instances.length,
-          instance_connected_count: instances.filter((i) => i.status === 'connected').length,
-          instance_limit: typeof limitRes.data === 'number' ? limitRes.data : 1,
+          instance_status: instRes.data?.status || 'disconnected',
+          instance_phone: instRes.data?.phone_number || '',
+          instance_send_mode: instRes.data?.send_mode || 'manual',
           lead_count: leadRes.count || 0,
           campaign_count: campaignRes.count || 0,
           template_count: templateRes.count || 0,
@@ -174,11 +142,7 @@ export function ClientManagement() {
       }
       if (filterPlan !== 'all' && c.plan_slug !== filterPlan) return false;
       if (filterSubStatus !== 'all' && c.sub_status !== filterSubStatus) return false;
-      if (filterWaStatus !== 'all') {
-        const anyMatch = c.instances.some((i) => i.status === filterWaStatus)
-          || (filterWaStatus === 'disconnected' && c.instances.length === 0);
-        if (!anyMatch) return false;
-      }
+      if (filterWaStatus !== 'all' && (c.instance_status || 'disconnected') !== filterWaStatus) return false;
       return true;
     });
   }, [clients, search, filterPlan, filterSubStatus, filterWaStatus]);
@@ -336,12 +300,7 @@ function FilterSelect({
 }
 
 function ClientCard({ client, onClick }: { client: ClientRow; onClick: () => void }) {
-  const primaryStatus = client.instance_connected_count > 0
-    ? 'connected'
-    : client.instances.length > 0
-      ? client.instances[0].status
-      : 'disconnected';
-  const waInfo = WA_STATUS_MAP[primaryStatus] || WA_STATUS_MAP.disconnected;
+  const waInfo = WA_STATUS_MAP[client.instance_status || 'disconnected'] || WA_STATUS_MAP.disconnected;
   const subInfo = SUB_STATUS_MAP[client.sub_status || 'active'] || SUB_STATUS_MAP.active;
   const planBadgeColor = client.plan_slug === 'anual'
     ? 'bg-amber-50 text-amber-700 border border-amber-200'
@@ -391,9 +350,6 @@ function ClientCard({ client, onClick }: { client: ClientRow; onClick: () => voi
         <div className="flex items-center gap-1.5">
           <Smartphone size={13} className="text-gray-400" />
           <Badge variant={waInfo.variant}>{waInfo.label}</Badge>
-          <span className="text-xs text-gray-400">
-            {client.instance_count}/{client.instance_limit < 0 ? '∞' : client.instance_limit}
-          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <Calendar size={13} className="text-gray-400" />
@@ -442,64 +398,7 @@ function ClientDetailModal({
 
   const currentPlan = plans.find((p) => p.id === client.plan_id);
   const subInfo = SUB_STATUS_MAP[client.sub_status || 'active'] || SUB_STATUS_MAP.active;
-  const [limitOverride, setLimitOverride] = useState<string>(
-    client.max_whatsapp_instances_override == null ? '' : String(client.max_whatsapp_instances_override),
-  );
-  const [savingLimit, setSavingLimit] = useState(false);
-  const [removingInstanceId, setRemovingInstanceId] = useState<string | null>(null);
-
-  async function handleSaveInstanceLimit() {
-    setSavingLimit(true);
-    try {
-      const trimmed = limitOverride.trim();
-      const parsed = trimmed === '' ? null : parseInt(trimmed, 10);
-      if (parsed !== null && (isNaN(parsed) || parsed < 0)) {
-        alert('Informe um número inteiro >= 0 ou deixe vazio para usar o plano.');
-        return;
-      }
-      const { error } = await supabase
-        .from('profiles')
-        .update({ max_whatsapp_instances_override: parsed, updated_at: new Date().toISOString() })
-        .eq('id', client.id);
-      if (error) throw error;
-
-      const { data: newLimit } = await supabase.rpc('resolve_whatsapp_instance_limit', {
-        p_user_id: client.id,
-      });
-      onUpdated({
-        ...client,
-        max_whatsapp_instances_override: parsed,
-        instance_limit: typeof newLimit === 'number' ? newLimit : client.instance_limit,
-      });
-    } catch {
-      alert('Erro ao salvar limite.');
-    } finally {
-      setSavingLimit(false);
-    }
-  }
-
-  async function handleRemoveInstance(instanceId: string) {
-    if (!confirm('Remover esta instância do cliente? Esta ação é irreversível.')) return;
-    setRemovingInstanceId(instanceId);
-    try {
-      const { error } = await supabase
-        .from('whatsapp_instances')
-        .delete()
-        .eq('id', instanceId);
-      if (error) throw error;
-      const remaining = client.instances.filter((i) => i.id !== instanceId);
-      onUpdated({
-        ...client,
-        instances: remaining,
-        instance_count: remaining.length,
-        instance_connected_count: remaining.filter((i) => i.status === 'connected').length,
-      });
-    } catch {
-      alert('Erro ao remover instância.');
-    } finally {
-      setRemovingInstanceId(null);
-    }
-  }
+  const waInfo = WA_STATUS_MAP[client.instance_status || 'disconnected'] || WA_STATUS_MAP.disconnected;
 
   async function handleChangePlan() {
     if (!selectedPlanId || selectedPlanId === client.plan_id) return;
@@ -896,72 +795,29 @@ function ClientDetailModal({
                   {usageBar(client.template_count, currentPlan?.max_templates ?? -1)}
                 </div>
                 <div className="bg-gray-50 rounded-xl p-3">
-                  <p className="text-xs text-gray-500 mb-1.5">Instâncias WhatsApp</p>
-                  {usageBar(client.instance_count, client.instance_limit)}
+                  <p className="text-xs text-gray-500 mb-1.5">WhatsApp</p>
+                  {usageBar(client.instance_status === 'connected' ? 1 : 0, currentPlan?.max_whatsapp_instances ?? 1)}
                 </div>
               </div>
             </section>
 
-            {/* WhatsApp instances */}
+            {/* WhatsApp section */}
             <section>
               <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <Smartphone size={14} className="text-gray-400" />
-                Instâncias WhatsApp ({client.instance_count}/{client.instance_limit < 0 ? '∞' : client.instance_limit})
+                WhatsApp
               </h3>
-
-              <div className="bg-gray-50 rounded-xl p-4 mb-3">
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">
-                  Limite de instâncias (deixe vazio para herdar do plano — atual do plano: {currentPlan?.max_whatsapp_instances ?? 1})
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    value={limitOverride}
-                    onChange={(e) => setLimitOverride(e.target.value)}
-                    placeholder="Herdar do plano"
-                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-                  />
-                  <Button size="sm" loading={savingLimit} onClick={handleSaveInstanceLimit}>
-                    <Save size={12} />
-                    Salvar
-                  </Button>
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center gap-4">
+                  <Badge variant={waInfo.variant}>{waInfo.label}</Badge>
+                  {client.instance_phone && (
+                    <span className="text-sm text-gray-700">{client.instance_phone}</span>
+                  )}
+                  <span className="text-xs text-gray-400 capitalize">
+                    Modo: {client.instance_send_mode || 'manual'}
+                  </span>
                 </div>
               </div>
-
-              {client.instances.length === 0 ? (
-                <div className="bg-gray-50 rounded-xl p-4 text-center text-xs text-gray-400">
-                  Nenhuma instância conectada.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {client.instances.map((inst) => {
-                    const info = WA_STATUS_MAP[inst.status] || WA_STATUS_MAP.disconnected;
-                    return (
-                      <div key={inst.id} className="bg-gray-50 rounded-xl p-3 flex items-center gap-3">
-                        <Smartphone size={14} className="text-gray-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {inst.display_name || inst.phone_number || 'Sem apelido'}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">
-                            {inst.phone_number || inst.instance_name}
-                          </p>
-                        </div>
-                        <Badge variant={info.variant} size="sm">{info.label}</Badge>
-                        <button
-                          onClick={() => handleRemoveInstance(inst.id)}
-                          disabled={removingInstanceId === inst.id}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                          title="Remover instância"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </section>
 
             {/* Admin notes */}

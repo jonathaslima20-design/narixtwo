@@ -4,7 +4,6 @@ export interface Profile {
   full_name: string;
   role: 'user' | 'admin';
   is_enabled: boolean;
-  max_whatsapp_instances_override?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -22,7 +21,6 @@ export interface WhatsAppInstance {
   id: string;
   user_id: string;
   instance_name: string;
-  display_name?: string;
   status: 'connecting' | 'connected' | 'disconnected' | 'error';
   phone_number: string;
   qr_code: string;

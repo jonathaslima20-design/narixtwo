@@ -280,14 +280,9 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
       const { data } = await supabase
         .from('whatsapp_instances')
         .select('status')
-        .eq('user_id', userId);
-      const rows = (data ?? []) as Array<{ status: InstanceStatus }>;
-      if (rows.length === 0) {
-        setInstanceStatus('unknown');
-        return;
-      }
-      const anyConnected = rows.some((r) => r.status === 'connected');
-      setInstanceStatus(anyConnected ? 'connected' : (rows[0].status ?? 'unknown'));
+        .eq('user_id', userId)
+        .maybeSingle();
+      setInstanceStatus((data?.status as InstanceStatus) ?? 'unknown');
     }
     loadInstance();
 
@@ -296,8 +291,9 @@ export function ChatPanel({ lead, userId, sendMode, onOpenDetails, onLeadUpdated
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'whatsapp_instances', filter: `user_id=eq.${userId}` },
-        () => {
-          loadInstance();
+        (payload) => {
+          const row = payload.new as { status?: InstanceStatus } | null;
+          if (row?.status) setInstanceStatus(row.status);
         }
       )
       .subscribe();

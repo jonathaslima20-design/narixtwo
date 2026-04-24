@@ -47,8 +47,6 @@ export function SendModeSelector() {
         .from('whatsapp_instances')
         .select('send_mode, away_message, business_hours_start, business_hours_end')
         .eq('user_id', user!.id)
-        .order('created_at', { ascending: true })
-        .limit(1)
         .maybeSingle();
       if (data) {
         const d = data as {

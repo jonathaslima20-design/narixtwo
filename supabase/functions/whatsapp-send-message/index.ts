@@ -173,7 +173,6 @@ Deno.serve(async (req: Request) => {
     const leadId = (body?.lead_id as string | undefined)?.trim();
     const content = (body?.content as string | undefined) ?? "";
     const aiGenerated = Boolean(body?.ai_generated);
-    const requestedInstanceId = (body?.instance_id as string | undefined)?.trim() ?? "";
 
     if (!leadId) {
       await logStage({ user_id: user.id, stage: "bad_request", error_message: "missing lead_id" });
@@ -217,29 +216,11 @@ Deno.serve(async (req: Request) => {
       jid_used: storedJid,
     });
 
-    let instance: { id?: string; instance_name: string; status: string; evolution_api_key?: string } | null = null;
-    let instErr: { message?: string } | null = null;
-
-    if (requestedInstanceId) {
-      const res = await admin
-        .from("whatsapp_instances")
-        .select("id, instance_name, status, evolution_api_key")
-        .eq("id", requestedInstanceId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      instance = res.data as typeof instance;
-      instErr = res.error;
-    } else {
-      const res = await admin
-        .from("whatsapp_instances")
-        .select("id, instance_name, status, evolution_api_key")
-        .eq("user_id", user.id)
-        .order("status", { ascending: false })
-        .order("created_at", { ascending: true });
-      instErr = res.error;
-      const rows = (res.data ?? []) as Array<{ id: string; instance_name: string; status: string; evolution_api_key?: string }>;
-      instance = rows.find((r) => r.status === "connected") ?? rows[0] ?? null;
-    }
+    const { data: instance, error: instErr } = await admin
+      .from("whatsapp_instances")
+      .select("instance_name, status, evolution_api_key")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
     if (instErr || !instance) {
       await logStage({
@@ -302,7 +283,7 @@ Deno.serve(async (req: Request) => {
         await admin
           .from("whatsapp_instances")
           .update({ status: "disconnected", last_error: JSON.stringify(stateJson).slice(0, 500) })
-          .eq("id", instance.id!);
+          .eq("user_id", user.id);
         return json(409, {
           error: "WhatsApp desconectado, reconecte pelo QR Code",
           requires_reconnect: true,
@@ -457,7 +438,7 @@ Deno.serve(async (req: Request) => {
             status: "disconnected",
             last_error: JSON.stringify(textJson).slice(0, 500),
           })
-          .eq("id", instance.id!);
+          .eq("user_id", user.id);
       }
 
       await admin.from("messages").insert({

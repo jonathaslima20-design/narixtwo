@@ -13,27 +13,54 @@ function json(status: number, data: unknown) {
   });
 }
 
-interface InstanceRow {
-  id: string;
-  user_id: string;
-  instance_name: string;
-  status: string;
-  phone_number: string | null;
-  [k: string]: unknown;
-}
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
 
-async function refreshOne(
-  admin: ReturnType<typeof createClient>,
-  evoUrl: string,
-  evoKey: string,
-  instance: InstanceRow,
-): Promise<InstanceRow> {
   try {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.replace("Bearer ", "").trim();
+    if (!token) return json(401, { error: "Missing authorization token" });
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
+    });
+    if (!userRes.ok) return json(401, { error: "Invalid authentication" });
+    const user = (await userRes.json()) as { id?: string };
+    if (!user?.id) return json(401, { error: "Invalid authentication" });
+
+    const admin = createClient(supabaseUrl, serviceKey);
+
+    const { data: instance } = await admin
+      .from("whatsapp_instances")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!instance) return json(200, { instance: null });
+
+    const { data: settings } = await admin
+      .from("admin_settings")
+      .select("key, value")
+      .in("key", ["EVOLUTION_API_URL", "EVOLUTION_GLOBAL_KEY"]);
+
+    const evoUrl = settings?.find((s) => s.key === "EVOLUTION_API_URL")?.value?.replace(/\/+$/, "");
+    const evoKey = settings?.find((s) => s.key === "EVOLUTION_GLOBAL_KEY")?.value;
+
+    if (!evoUrl || !evoKey) return json(200, { instance });
+
     const stateRes = await fetch(
       `${evoUrl}/instance/connectionState/${encodeURIComponent(instance.instance_name)}`,
       { headers: { apikey: evoKey } },
     );
-    if (!stateRes.ok) return instance;
+
+    if (!stateRes.ok) return json(200, { instance });
+
     const stateJson = await stateRes.json();
     const state =
       stateJson?.instance?.state ??
@@ -76,91 +103,13 @@ async function refreshOne(
       const { data: updated } = await admin
         .from("whatsapp_instances")
         .update(updates)
-        .eq("id", instance.id)
+        .eq("user_id", user.id)
         .select()
         .maybeSingle();
-      if (updated) return updated as InstanceRow;
-    }
-    return instance;
-  } catch (_err) {
-    return instance;
-  }
-}
-
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const token = authHeader.replace("Bearer ", "").trim();
-    if (!token) return json(401, { error: "Missing authorization token" });
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
-    });
-    if (!userRes.ok) return json(401, { error: "Invalid authentication" });
-    const user = (await userRes.json()) as { id?: string };
-    if (!user?.id) return json(401, { error: "Invalid authentication" });
-
-    let requestedInstanceId = "";
-    if (req.method === "POST") {
-      try {
-        const body = await req.json();
-        if (body && typeof body === "object") {
-          const b = body as { instance_id?: string };
-          if (typeof b.instance_id === "string") requestedInstanceId = b.instance_id.trim();
-        }
-      } catch (_) {
-        // no body
-      }
+      return json(200, { instance: updated ?? instance });
     }
 
-    const admin = createClient(supabaseUrl, serviceKey);
-
-    let instances: InstanceRow[] = [];
-    if (requestedInstanceId) {
-      const { data } = await admin
-        .from("whatsapp_instances")
-        .select("*")
-        .eq("id", requestedInstanceId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (data) instances = [data as InstanceRow];
-    } else {
-      const { data } = await admin
-        .from("whatsapp_instances")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-      instances = (data ?? []) as InstanceRow[];
-    }
-
-    const { data: settings } = await admin
-      .from("admin_settings")
-      .select("key, value")
-      .in("key", ["EVOLUTION_API_URL", "EVOLUTION_GLOBAL_KEY"]);
-
-    const evoUrl = settings?.find((s) => s.key === "EVOLUTION_API_URL")?.value?.replace(/\/+$/, "");
-    const evoKey = settings?.find((s) => s.key === "EVOLUTION_GLOBAL_KEY")?.value;
-
-    if (evoUrl && evoKey && instances.length > 0) {
-      instances = await Promise.all(
-        instances.map((inst) => refreshOne(admin, evoUrl, evoKey, inst)),
-      );
-    }
-
-    // Backwards-compat: if a specific instance was requested, also expose it at .instance.
-    if (requestedInstanceId) {
-      return json(200, { instance: instances[0] ?? null, instances });
-    }
-
-    return json(200, { instances, instance: instances[0] ?? null });
+    return json(200, { instance });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro desconhecido";
     return json(500, { error: message });
