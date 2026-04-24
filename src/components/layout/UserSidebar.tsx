@@ -155,9 +155,12 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
           </p>
           <p className="text-xs text-gray-400 truncate">{profile?.email}</p>
           {plan?.name && !isTrial && (
-            <span className="inline-block mt-1.5 text-[10px] font-semibold text-white bg-gray-900 px-2.5 py-1 rounded-lg tracking-wide uppercase">
+            <button
+              onClick={() => setShowPricing(true)}
+              className="inline-block mt-1.5 text-[10px] font-semibold text-white bg-gray-900 px-2.5 py-1 rounded-lg tracking-wide uppercase hover:bg-gray-700 transition-colors cursor-pointer"
+            >
               {plan.name}
-            </span>
+            </button>
           )}
         </div>
         <motion.button
