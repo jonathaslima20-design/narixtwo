@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smartphone, CheckCircle2, AlertCircle, RefreshCw, Wifi, WifiOff, QrCode, RotateCcw, Trash2, ShieldAlert } from 'lucide-react';
+import { Smartphone, CheckCircle2, AlertCircle, RefreshCw, Wifi, WifiOff, QrCode, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { WhatsAppInstance } from '../../lib/types';
-import { WipeChatDialog } from '../../components/settings/WipeChatDialog';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -218,7 +217,6 @@ export function ConnectWhatsApp({ embedded = false }: { embedded?: boolean } = {
   const status = instance?.status;
   const hasValidQr = isValidQr(instance?.qr_code);
   const lastError = (instance?.last_error || '').trim();
-  const [wipeOpen, setWipeOpen] = useState(false);
 
   const content = (
     <>
@@ -252,47 +250,9 @@ export function ConnectWhatsApp({ embedded = false }: { embedded?: boolean } = {
             />
           )}
 
-          {user?.id && !loading && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="mt-6"
-            >
-              <Card>
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <ShieldAlert size={18} className="text-red-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-gray-900">Limpar dados do BrainLead</h4>
-                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                      Apaga todas as conversas, mensagens e áudios salvos aqui no BrainLead. As mensagens originais no
-                      WhatsApp não são afetadas e o histórico será re-importado automaticamente após a limpeza.
-                    </p>
-                    <div className="mt-3">
-                      <Button variant="danger" size="sm" onClick={() => setWipeOpen(true)}>
-                        <Trash2 size={14} /> Limpar todas as conversas
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          )}
         </motion.div>
       </div>
 
-      {user?.id && (
-        <WipeChatDialog
-          open={wipeOpen}
-          userId={user.id}
-          onClose={() => setWipeOpen(false)}
-          onWiped={() => {
-            loadInstance();
-          }}
-        />
-      )}
     </>
   );
 
