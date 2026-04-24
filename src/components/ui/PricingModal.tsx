@@ -109,7 +109,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
                   <div className="mb-4">
                     <span className="text-2xl font-bold text-gray-400">Gratis</span>
                   </div>
-                  <p className="text-xs text-gray-400 mb-4">2 dias ou 20 envios</p>
+                  <p className="text-xs text-gray-400 mb-4">2 dias ou 50 envios</p>
                   <button
                     disabled
                     className="w-full py-2.5 rounded-xl text-sm font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
@@ -125,7 +125,7 @@ export function PricingModal({ open, onClose, permanent, reason = 'browse' }: Pr
                     ))}
                     <li className="flex items-start gap-2 text-xs text-gray-400">
                       <Check size={13} className="mt-0.5 shrink-0" />
-                      Limite: 20 envios
+                      Limite: 50 envios
                     </li>
                   </ul>
                 </div>
