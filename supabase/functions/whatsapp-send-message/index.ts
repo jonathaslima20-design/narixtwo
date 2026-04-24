@@ -187,7 +187,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: lead, error: leadErr } = await admin
       .from("leads")
-      .select("id, user_id, phone, message_count, whatsapp_jid")
+      .select("id, user_id, phone, message_count, whatsapp_jid, instance_id")
       .eq("id", leadId)
       .maybeSingle();
 
@@ -216,11 +216,17 @@ Deno.serve(async (req: Request) => {
       jid_used: storedJid,
     });
 
-    const { data: instance, error: instErr } = await admin
+    const leadInstanceId = (lead as { instance_id: string | null }).instance_id || null;
+    let instanceQuery = admin
       .from("whatsapp_instances")
-      .select("instance_name, status, evolution_api_key")
-      .eq("user_id", user.id)
-      .maybeSingle();
+      .select("id, instance_name, status, evolution_api_key")
+      .eq("user_id", user.id);
+    if (leadInstanceId) {
+      instanceQuery = instanceQuery.eq("id", leadInstanceId);
+    } else {
+      instanceQuery = instanceQuery.eq("status", "connected").order("created_at", { ascending: true }).limit(1);
+    }
+    const { data: instance, error: instErr } = await instanceQuery.maybeSingle();
 
     if (instErr || !instance) {
       await logStage({
@@ -487,6 +493,7 @@ Deno.serve(async (req: Request) => {
         status: "sent",
         ai_generated: aiGenerated,
         approved_by_user: true,
+        instance_id: (instance as { id: string }).id,
       })
       .select()
       .maybeSingle();
@@ -497,6 +504,7 @@ Deno.serve(async (req: Request) => {
         last_message: content,
         last_activity_at: new Date().toISOString(),
         message_count: (lead.message_count || 0) + 1,
+        ...(leadInstanceId ? {} : { instance_id: (instance as { id: string }).id }),
       })
       .eq("id", leadId);
 

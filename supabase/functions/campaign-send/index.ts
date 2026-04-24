@@ -154,14 +154,25 @@ Deno.serve(async (req: Request) => {
         .eq("id", campaignId);
     }
 
-    const { data: instance } = await admin
-      .from("whatsapp_instances")
-      .select("instance_name, status, evolution_api_key")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const selectedInstanceIds: string[] = Array.isArray(campaign.instance_ids)
+      ? (campaign.instance_ids as string[])
+      : [];
 
-    if (!instance)
-      return json(400, { error: "Nenhuma instância do WhatsApp configurada" });
+    let instanceQuery = admin
+      .from("whatsapp_instances")
+      .select("id, instance_name, status, evolution_api_key")
+      .eq("user_id", user.id);
+    if (selectedInstanceIds.length > 0) {
+      instanceQuery = instanceQuery.in("id", selectedInstanceIds);
+    }
+    const { data: instancesRaw } = await instanceQuery;
+
+    const instances = (instancesRaw || []).filter(
+      (i: { status: string }) => i.status === "connected",
+    );
+
+    if (instances.length === 0)
+      return json(400, { error: "Nenhuma instância do WhatsApp conectada" });
 
     const { data: settings } = await admin
       .from("admin_settings")
@@ -178,52 +189,51 @@ Deno.serve(async (req: Request) => {
     if (!evoUrl || !evoKey)
       return json(400, { error: "Evolution API não configurada" });
 
-    const instanceKey =
-      (instance as { evolution_api_key?: string }).evolution_api_key?.trim() ||
-      "";
-    const apiKeyForInstance = instanceKey || evoKey;
-    const evoHeaders = {
-      "Content-Type": "application/json",
-      apikey: apiKeyForInstance,
+    type InstanceCtx = {
+      id: string;
+      instance_name: string;
+      evolution_api_key: string | null;
+      headers: Record<string, string>;
     };
-    const instanceName = instance.instance_name;
 
-    try {
-      const stateRes = await fetch(
-        `${evoUrl}/instance/connectionState/${encodeURIComponent(instanceName)}`,
-        { method: "GET", headers: evoHeaders },
-      );
-      const stateJson = (await stateRes.json().catch(() => ({}))) as Record<
-        string,
-        unknown
-      >;
-      const stateValue =
-        stateJson?.instance &&
-        (
-          (stateJson as Record<string, Record<string, unknown>>).instance
-            ?.state as string
+    const instanceCtxAll: InstanceCtx[] = instances.map((i: { id: string; instance_name: string; evolution_api_key: string | null }) => {
+      const key = (i.evolution_api_key || "").trim() || evoKey;
+      return {
+        id: i.id,
+        instance_name: i.instance_name,
+        evolution_api_key: i.evolution_api_key,
+        headers: { "Content-Type": "application/json", apikey: key },
+      };
+    });
+
+    // Verify connection state for each selected instance
+    const liveInstances: InstanceCtx[] = [];
+    for (const ctx of instanceCtxAll) {
+      try {
+        const stateRes = await fetch(
+          `${evoUrl}/instance/connectionState/${encodeURIComponent(ctx.instance_name)}`,
+          { method: "GET", headers: ctx.headers },
         );
-      const rootState = stateJson?.state as string | undefined;
-      const currentState = (stateValue || rootState || "")
-        .toString()
-        .toLowerCase();
-      if (!stateRes.ok || currentState !== "open") {
-        await admin
-          .from("campaigns")
-          .update({ status: "paused", updated_at: new Date().toISOString() })
-          .eq("id", campaignId);
-        return json(409, {
-          error: "WhatsApp desconectado. Campanha pausada.",
-        });
+        const stateJson = (await stateRes.json().catch(() => ({}))) as Record<string, unknown>;
+        const stateValue = stateJson?.instance &&
+          ((stateJson as Record<string, Record<string, unknown>>).instance?.state as string);
+        const rootState = stateJson?.state as string | undefined;
+        const currentState = (stateValue || rootState || "").toString().toLowerCase();
+        if (stateRes.ok && currentState === "open") {
+          liveInstances.push(ctx);
+        }
+      } catch {
+        // skip this instance
       }
-    } catch {
+    }
+
+    if (liveInstances.length === 0) {
       await admin
         .from("campaigns")
         .update({ status: "paused", updated_at: new Date().toISOString() })
         .eq("id", campaignId);
-      return json(502, {
-        error:
-          "Não foi possível verificar a conexão com a Evolution. Campanha pausada.",
+      return json(409, {
+        error: "Nenhuma instância conectada disponível. Campanha pausada.",
       });
     }
 
@@ -296,8 +306,13 @@ Deno.serve(async (req: Request) => {
     const startTime = Date.now();
     let sentCount = 0;
     let failedCount = 0;
+    let rrIndex = 0;
 
     for (const recipient of recipients) {
+      const ctx = liveInstances[rrIndex % liveInstances.length];
+      rrIndex++;
+      const instanceName = ctx.instance_name;
+      const evoHeaders = ctx.headers;
       if (Date.now() - startTime > BUDGET_MS) break;
 
       if (!isWithinWindow(campaign.send_window_start, campaign.send_window_end)) break;
@@ -346,7 +361,7 @@ Deno.serve(async (req: Request) => {
 
       await admin
         .from("campaign_recipients")
-        .update({ status: "sending" })
+        .update({ status: "sending", instance_id: ctx.id })
         .eq("id", recipient.id);
 
       const messageContent = interpolateMessage(
@@ -456,6 +471,7 @@ Deno.serve(async (req: Request) => {
             content: isMedia ? (captionContent || messageContent) : messageContent,
             whatsapp_message_id: waId,
             status: "sent",
+            instance_id: ctx.id,
             media_url: (isMedia || isAudio) && mediaIsUrl ? mediaUrl : "",
             media_type: isAudio ? "audio" : isMedia ? (campaign.message_type || "") : "",
             media_mime: isMedia ? (campaign.media_type || "") : "",

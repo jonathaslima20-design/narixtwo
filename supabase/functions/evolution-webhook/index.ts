@@ -809,6 +809,7 @@ Deno.serve(async (req: Request) => {
             user_id: userId,
             phone,
             whatsapp_jid: identity.jid,
+            instance_id: instance.id,
             name: pushName || "",
             last_message: preview,
             message_count: 0,
@@ -846,6 +847,11 @@ Deno.serve(async (req: Request) => {
           });
         } else {
           leadId = existingLead.id as string;
+          await admin
+            .from("leads")
+            .update({ instance_id: instance.id })
+            .eq("id", leadId)
+            .is("instance_id", null);
         }
 
         if (waMessageId) {
@@ -875,6 +881,7 @@ Deno.serve(async (req: Request) => {
         const { error: msgInsertErr } = await admin.from("messages").insert({
           user_id: userId,
           lead_id: leadId,
+          instance_id: instance.id,
           direction: fromMe ? "out" : "in",
           content,
           media_url,

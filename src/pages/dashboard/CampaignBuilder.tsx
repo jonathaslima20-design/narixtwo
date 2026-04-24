@@ -34,6 +34,7 @@ import { AudioPlayer } from '../../components/chat/AudioPlayer';
 import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
 import { PricingModal } from '../../components/ui/PricingModal';
 import { RangeSlider } from '../../components/ui/RangeSlider';
+import { useInstances, instanceDisplayName } from '../../lib/useInstances';
 
 const STEPS = ['Mensagem', 'Destinatários', 'Agendamento', 'Revisão'];
 
@@ -57,6 +58,7 @@ interface CampaignForm {
   send_window_end: string;
   delay_ms: number;
   delay_ms_max: number;
+  instance_ids: string[];
 }
 
 const INITIAL_FORM: CampaignForm = {
@@ -79,6 +81,7 @@ const INITIAL_FORM: CampaignForm = {
   send_window_end: '',
   delay_ms: 20000,
   delay_ms_max: 40000,
+  instance_ids: [],
 };
 
 function readAudioDuration(file: File): Promise<number> {
@@ -108,6 +111,8 @@ export function CampaignBuilder() {
   const navigate = useNavigate();
   const { categories } = useLeadCategories();
   const { isBlocked } = useSubscriptionCtx();
+  const { instances } = useInstances();
+  const connectedInstances = instances.filter((i) => i.status === 'connected');
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<CampaignForm>(INITIAL_FORM);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -221,6 +226,13 @@ export function CampaignBuilder() {
     updateForm({ filter_tags: tags });
   }
 
+  function toggleInstance(id: string) {
+    const next = form.instance_ids.includes(id)
+      ? form.instance_ids.filter((x) => x !== id)
+      : [...form.instance_ids, id];
+    updateForm({ instance_ids: next });
+  }
+
   function toggleExclude(leadId: string) {
     const next = new Set(form.excludedLeadIds);
     if (next.has(leadId)) next.delete(leadId);
@@ -297,6 +309,7 @@ export function CampaignBuilder() {
           filter_tags: form.filter_tags,
           filter_category: form.filter_category,
           exclude_recent_days: form.exclude_recent_days,
+          instance_ids: form.instance_ids,
         })
         .select()
         .maybeSingle();
@@ -707,6 +720,63 @@ export function CampaignBuilder() {
           {step === 1 && (
             <motion.div key="step-1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
               <div className="space-y-5">
+                {/* Instance selector (when > 1 instance) */}
+                {connectedInstances.length > 1 && (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                      <Smartphone size={16} className="text-gray-500" />
+                      Instâncias de envio
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Escolha de quais números a campanha será enviada. Os destinatários serão distribuídos entre as instâncias selecionadas. Se nenhuma for escolhida, todas serão usadas.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {connectedInstances.map((inst) => {
+                        const selected = form.instance_ids.includes(inst.id);
+                        return (
+                          <button
+                            key={inst.id}
+                            type="button"
+                            onClick={() => toggleInstance(inst.id)}
+                            className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                              selected
+                                ? 'border-gray-900 bg-gray-900/5'
+                                : 'border-gray-100 hover:border-gray-300'
+                            }`}
+                          >
+                            <div
+                              className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border ${
+                                selected
+                                  ? 'bg-gray-900 border-gray-900 text-white'
+                                  : 'border-gray-300 bg-white'
+                              }`}
+                            >
+                              {selected && <Check size={12} />}
+                            </div>
+                            <Smartphone size={16} className="text-gray-400 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 truncate">
+                                {instanceDisplayName(inst)}
+                              </p>
+                              {inst.phone_number && inst.label && (
+                                <p className="text-[11px] text-gray-400 truncate">{inst.phone_number}</p>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 shrink-0">
+                              conectado
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {form.instance_ids.length === 0 && (
+                      <p className="text-[11px] text-gray-400 mt-3">
+                        Nenhuma selecionada — a campanha será distribuída entre todas as instâncias conectadas.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Filters */}
                 <div className="bg-white rounded-2xl border border-gray-100 p-5">
                   <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">

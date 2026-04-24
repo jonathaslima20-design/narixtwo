@@ -66,6 +66,7 @@ export function Leads() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ListFilter>('all');
+  const [instanceFilter, setInstanceFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sendMode, setSendMode] = useState<SendMode>('manual');
@@ -412,6 +413,8 @@ export function Leads() {
               onSelect={(l) => setSelectedId(l.id)}
               filter={filter}
               onFilterChange={setFilter}
+              instanceFilter={instanceFilter}
+              onInstanceFilterChange={setInstanceFilter}
             />
           )}
         </div>

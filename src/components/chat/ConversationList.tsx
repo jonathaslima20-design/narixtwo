@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Virtuoso } from 'react-virtuoso';
-import { Search, Star, Archive } from 'lucide-react';
+import { Search, Star, Archive, Smartphone, ChevronDown } from 'lucide-react';
 import { Lead } from '../../lib/types';
 import { leadDisplayName } from '../../lib/leadDisplay';
 import { useLeadCategories } from '../../lib/useLeadCategories';
 import { resolveIcon } from '../../lib/iconMap';
+import { useInstances, instanceDisplayName } from '../../lib/useInstances';
 
 function formatTime(iso?: string) {
   if (!iso) return '';
@@ -27,6 +28,8 @@ interface Props {
   onSelect: (lead: Lead) => void;
   filter: 'all' | 'unread' | 'archived';
   onFilterChange: (f: 'all' | 'unread' | 'archived') => void;
+  instanceFilter?: string;
+  onInstanceFilterChange?: (v: string) => void;
 }
 
 export function ConversationList({
@@ -37,8 +40,15 @@ export function ConversationList({
   onSelect,
   filter,
   onFilterChange,
+  instanceFilter = 'all',
+  onInstanceFilterChange,
 }: Props) {
   const { categories } = useLeadCategories();
+  const { instances } = useInstances();
+  const visibleLeads = useMemo(() => {
+    if (instanceFilter === 'all' || instances.length <= 1) return leads;
+    return leads.filter((l) => l.instance_id === instanceFilter);
+  }, [leads, instanceFilter, instances.length]);
   const filters: { key: typeof filter; label: string }[] = [
     { key: 'all', label: 'Todos' },
     { key: 'unread', label: 'Não lidas' },
@@ -114,16 +124,32 @@ export function ConversationList({
             </button>
           ))}
         </div>
+        {instances.length > 1 && onInstanceFilterChange && (
+          <div className="mt-2 relative">
+            <Smartphone size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <select
+              value={instanceFilter}
+              onChange={(e) => onInstanceFilterChange(e.target.value)}
+              className="w-full appearance-none pl-7 pr-6 py-1.5 text-xs bg-gray-50 border border-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent cursor-pointer"
+            >
+              <option value="all">Todas as instâncias ({instances.length})</option>
+              {instances.map((i) => (
+                <option key={i.id} value={i.id}>{instanceDisplayName(i)}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 relative">
-        {leads.length === 0 ? (
+        {visibleLeads.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-sm text-gray-400">Nenhuma conversa</p>
           </div>
         ) : (
           <Virtuoso
-            data={leads}
+            data={visibleLeads}
             className="absolute inset-0"
             increaseViewportBy={{ top: 400, bottom: 400 }}
             computeItemKey={(_, lead) => lead.id}

@@ -70,6 +70,7 @@ export interface Lead {
   is_archived?: boolean;
   is_blocked?: boolean;
   whatsapp_jid?: string | null;
+  instance_id?: string | null;
   profile_picture_url?: string;
   profile_picture_updated_at?: string;
   hydrated_at?: string | null;
@@ -98,6 +99,7 @@ export interface Message {
   ai_generated: boolean;
   approved_by_user: boolean;
   audio_duration_seconds?: number;
+  instance_id?: string | null;
   created_at: string;
 }
 
@@ -212,6 +214,7 @@ export interface Campaign {
   filter_tags: string[];
   filter_category: string;
   exclude_recent_days: number;
+  instance_ids: string[];
   created_at: string;
   updated_at: string;
 }
