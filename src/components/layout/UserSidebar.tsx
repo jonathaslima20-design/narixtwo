@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X, Send, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Home, MessageCircle, LogOut, Brain, Users, Megaphone, Settings, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../lib/AuthContext';
 import { useSubscriptionCtx } from '../../lib/SubscriptionContext';
@@ -105,19 +105,6 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
         })}
       </nav>
 
-      <div className="px-3 pb-3">
-        <SidebarPlanWidget
-          planName={plan?.name ?? ''}
-          isTrial={isTrial}
-          isBlocked={isBlocked}
-          sendCount={sendCount}
-          remainingSends={remainingSends}
-          daysLeft={daysLeft}
-          maxSends={plan?.max_sends ?? -1}
-          onClick={() => setShowPricing(true)}
-        />
-      </div>
-
       <PricingModal open={showPricing} onClose={() => setShowPricing(false)} reason={pricingReason} />
 
       <div className="px-3 py-4 border-t border-gray-100">
@@ -126,6 +113,16 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
             {profile?.full_name || profile?.email || 'Usuario'}
           </p>
           <p className="text-xs text-gray-400 truncate">{profile?.email}</p>
+          {plan?.name && (
+            <span className="inline-block mt-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+              {plan.name}
+            </span>
+          )}
+          {isTrial && !plan?.name && (
+            <span className="inline-block mt-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
+              Trial
+            </span>
+          )}
         </div>
         <motion.button
           whileTap={{ scale: 0.97 }}
@@ -140,100 +137,3 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
   );
 }
 
-function SidebarPlanWidget({
-  planName,
-  isTrial,
-  isBlocked,
-  sendCount,
-  remainingSends,
-  daysLeft,
-  maxSends,
-  onClick,
-}: {
-  planName: string;
-  isTrial: boolean;
-  isBlocked: boolean;
-  sendCount: number;
-  remainingSends: number;
-  daysLeft: number;
-  maxSends: number;
-  onClick: () => void;
-}) {
-  const base = 'w-full text-left rounded-2xl p-3.5 transition-all duration-150 cursor-pointer';
-
-  if (isBlocked) {
-    const sendsExhausted = maxSends !== -1 && sendCount >= maxSends;
-    const timeExpired = daysLeft <= 0;
-    let reason = 'Seu periodo de teste terminou. Escolha um plano para continuar.';
-    if (sendsExhausted && !timeExpired) {
-      reason = 'Voce utilizou todos os envios de teste. Escolha um plano para continuar.';
-    } else if (timeExpired && !sendsExhausted) {
-      reason = 'Seu periodo de teste terminou. Escolha um plano para continuar.';
-    } else if (sendsExhausted && timeExpired) {
-      reason = 'Seu periodo de teste terminou e os envios foram utilizados. Escolha um plano para continuar.';
-    }
-    return (
-      <button onClick={onClick} className={`${base} bg-red-50 border border-red-100 hover:bg-red-100/70`}>
-        <div className="flex items-center gap-2 mb-1">
-          <AlertTriangle size={13} className="text-red-500" />
-          <span className="text-xs font-semibold text-red-700">Plano expirado</span>
-        </div>
-        <p className="text-[11px] text-red-500 leading-relaxed">
-          {reason}
-        </p>
-      </button>
-    );
-  }
-
-  if (isTrial) {
-    const sendPct = maxSends > 0 ? Math.min(100, Math.round((sendCount / maxSends) * 100)) : 0;
-    const barColor = sendPct >= 80 ? 'bg-red-500' : sendPct >= 50 ? 'bg-amber-500' : 'bg-gray-900';
-
-    return (
-      <button onClick={onClick} className={`${base} bg-gray-50 border border-gray-100 hover:bg-gray-100/80`}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5">
-            <Clock size={12} className="text-amber-500" />
-            <span className="text-xs font-semibold text-gray-900">Trial</span>
-          </div>
-          <span className="text-[10px] font-medium text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-100">
-            {daysLeft}d restante{daysLeft !== 1 ? 's' : ''}
-          </span>
-        </div>
-
-        <div className="mb-1.5">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1">
-              <Send size={10} className="text-gray-400" />
-              <span className="text-[11px] text-gray-500">Envios</span>
-            </div>
-            <span className="text-[11px] font-medium text-gray-700">{sendCount}/{maxSends}</span>
-          </div>
-          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <motion.div
-              className={`h-full rounded-full ${barColor}`}
-              initial={{ width: 0 }}
-              animate={{ width: `${sendPct}%` }}
-              transition={{ duration: 0.6, ease: 'easeOut' }}
-            />
-          </div>
-          <p className="text-[10px] text-gray-400 mt-1">{remainingSends} restante{remainingSends !== 1 ? 's' : ''}</p>
-        </div>
-      </button>
-    );
-  }
-
-  if (!planName) return null;
-
-  return (
-    <button onClick={onClick} className={`${base} bg-emerald-50 border border-emerald-100 hover:bg-emerald-100/70`}>
-      <div className="flex items-center gap-2">
-        <CheckCircle size={13} className="text-emerald-500" />
-        <div>
-          <span className="text-xs font-semibold text-emerald-800 block leading-tight">{planName}</span>
-          <span className="text-[10px] text-emerald-600">Envios ilimitados</span>
-        </div>
-      </div>
-    </button>
-  );
-}
