@@ -117,14 +117,19 @@ Deno.serve(async (req: Request) => {
     if (!user?.id) return json(401, { error: "Invalid authentication" });
 
     let forceReset = false;
+    let requestedInstanceId = "";
+    let requestedDisplayName = "";
     if (req.method === "POST") {
       try {
         const body = await req.json();
-        if (body && typeof body === "object" && (body as { reset?: boolean }).reset === true) {
-          forceReset = true;
+        if (body && typeof body === "object") {
+          const b = body as { reset?: boolean; instance_id?: string; display_name?: string };
+          if (b.reset === true) forceReset = true;
+          if (typeof b.instance_id === "string") requestedInstanceId = b.instance_id.trim();
+          if (typeof b.display_name === "string") requestedDisplayName = b.display_name.trim();
         }
       } catch (_) {
-        // no body, ignore
+        // no body
       }
     }
 
@@ -158,21 +163,52 @@ Deno.serve(async (req: Request) => {
       return json(400, { error: "Evolution API não configurada no painel admin" });
     }
 
-    const { data: existingInstance } = await admin
-      .from("whatsapp_instances")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    let existingInstance: Record<string, unknown> | null = null;
 
-    const oldInstanceName = existingInstance?.instance_name as string | undefined;
+    if (requestedInstanceId) {
+      const { data } = await admin
+        .from("whatsapp_instances")
+        .select("*")
+        .eq("id", requestedInstanceId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!data) {
+        return json(404, { error: "Instância não encontrada" });
+      }
+      existingInstance = data;
+    }
+
+    const isCreateNew = !existingInstance;
+
+    if (isCreateNew) {
+      // Check the effective limit before attempting to insert.
+      const { count: currentCount } = await admin
+        .from("whatsapp_instances")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+
+      const { data: limitRpc } = await admin.rpc("resolve_whatsapp_instance_limit", {
+        p_user_id: user.id,
+      });
+      const effectiveLimit = typeof limitRpc === "number" ? limitRpc : 1;
+
+      if (effectiveLimit >= 0 && (currentCount ?? 0) >= effectiveLimit) {
+        return json(403, {
+          error: "Limite de instâncias de WhatsApp atingido. Contate o suporte para aumentar.",
+          limit: effectiveLimit,
+        });
+      }
+    }
+
+    const oldInstanceName = (existingInstance?.instance_name as string | undefined) ?? undefined;
     const isConnected = existingInstance?.status === "connected";
-    const mustReset = forceReset || (!!existingInstance && !isConnected);
+    const mustReset = !isCreateNew && (forceReset || !isConnected);
 
     if (mustReset && oldInstanceName) {
       await hardResetInstance(evoUrl, evoKey, oldInstanceName);
     }
 
-    const instanceName = mustReset || !oldInstanceName
+    const instanceName = isCreateNew || mustReset || !oldInstanceName
       ? `brainlead_${user.id.slice(0, 8)}_${Date.now()}`
       : oldInstanceName;
 
@@ -290,23 +326,54 @@ Deno.serve(async (req: Request) => {
     }
 
     const nowIso = new Date().toISOString();
-    const upsertPayload: Record<string, unknown> = {
-      user_id: user.id,
-      instance_name: instanceName,
-      status: "connecting",
-      qr_code: qrBase64,
-      qr_updated_at: nowIso,
-      last_error: null,
-    };
-    if (instanceApiKey) upsertPayload.evolution_api_key = instanceApiKey;
+    let saved: Record<string, unknown> | null = null;
 
-    const { data: saved, error: saveErr } = await admin
-      .from("whatsapp_instances")
-      .upsert(upsertPayload, { onConflict: "user_id" })
-      .select()
-      .maybeSingle();
+    if (isCreateNew) {
+      const insertPayload: Record<string, unknown> = {
+        user_id: user.id,
+        instance_name: instanceName,
+        display_name: requestedDisplayName || "",
+        status: "connecting",
+        qr_code: qrBase64,
+        qr_updated_at: nowIso,
+        last_error: null,
+      };
+      if (instanceApiKey) insertPayload.evolution_api_key = instanceApiKey;
 
-    if (saveErr) return json(500, { error: "Falha ao salvar instância" });
+      const { data, error } = await admin
+        .from("whatsapp_instances")
+        .insert(insertPayload)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        const msg = error.message || "";
+        if (msg.toLowerCase().includes("limite de instâncias") || msg.toLowerCase().includes("limit")) {
+          return json(403, { error: msg });
+        }
+        return json(500, { error: "Falha ao salvar instância", details: msg });
+      }
+      saved = data;
+    } else {
+      const updatePayload: Record<string, unknown> = {
+        instance_name: instanceName,
+        status: "connecting",
+        qr_code: qrBase64,
+        qr_updated_at: nowIso,
+        last_error: null,
+      };
+      if (instanceApiKey) updatePayload.evolution_api_key = instanceApiKey;
+
+      const { data, error } = await admin
+        .from("whatsapp_instances")
+        .update(updatePayload)
+        .eq("id", existingInstance!.id as string)
+        .select()
+        .maybeSingle();
+
+      if (error) return json(500, { error: "Falha ao atualizar instância" });
+      saved = data;
+    }
 
     return json(200, { instance: saved });
   } catch (err) {

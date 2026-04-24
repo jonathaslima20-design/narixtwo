@@ -118,6 +118,8 @@ export function Leads() {
         .from('whatsapp_instances')
         .select('send_mode')
         .eq('user_id', user!.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle();
       if (cancelled) return;
       if (inst && (inst as WhatsAppInstance).send_mode) {
