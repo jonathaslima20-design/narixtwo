@@ -155,7 +155,7 @@ export function UserSidebar({ onClose }: { onClose?: () => void }) {
           </p>
           <p className="text-xs text-gray-400 truncate">{profile?.email}</p>
           {plan?.name && !isTrial && (
-            <span className="inline-block mt-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+            <span className="inline-block mt-1.5 text-[10px] font-semibold text-white bg-gray-900 px-2.5 py-1 rounded-lg tracking-wide uppercase">
               {plan.name}
             </span>
           )}
